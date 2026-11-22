@@ -44,6 +44,17 @@ python -m http.server 8000
 
 之後每次 `git push` 到 `main`，GitHub Pages 會自動重新部署。
 
+## CARTO 底圖金鑰（部署後務必設定）
+
+CARTO 底圖已改為需要（免費）API 金鑰，未帶金鑰時會顯示「API KEY REQUIRED」浮水印圖磚。金鑰設定在 `index.html` 的 `CONFIG.CARTO_API_KEY`，底圖與標籤圖層網址都會自動加上 `?key=`。
+
+由於這是純前端網頁，**金鑰會隨程式碼公開**（repo 與 GitHub Pages 皆可看到）。部署到 GitHub Pages 後，請立即：
+
+1. 登入 CARTO 後台，找到此 API 金鑰的設定。
+2. 加入 Referer（允許網域）限制：`https://<帳號>.github.io/*`。
+3. 若仍需在本機開發，可一併加入 `http://localhost:*`。注意：`file://` 雙擊開啟時瀏覽器不送 Referer，加上限制後本機雙擊可能無法載入底圖，請改用本機伺服器。
+4. 若金鑰疑似被濫用，可在後台重新產生金鑰並更新 `CONFIG.CARTO_API_KEY`。
+
 ## 專案結構
 
 ```

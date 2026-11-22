@@ -243,8 +243,11 @@ const CONFIG = {
   SPOT_ZOOM: 15,             // 選取跑點時的縮放等級
   LABEL_MIN_ZOOM: 14,        // 縮放 ≥ 14 疊加 CARTO 純標籤圖層
   GEO_TIMEOUT_MS: 10000,     // 定位逾時
-  TILE_BASE: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}{r}.png',
-  TILE_LABELS: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_only_labels/{z}/{x}/{y}{r}.png',
+  // CARTO 底圖金鑰（CARTO 已改為需要免費 API 金鑰，否則回傳「API KEY REQUIRED」浮水印圖磚）。
+  // 此金鑰會隨前端程式公開；部署後請至 CARTO 後台將金鑰限制在部署網域（Referer），見 README。
+  CARTO_API_KEY: 'cb1_5e1f_1_c7302948d999cce1d9d6c96b',
+  TILE_BASE: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}{r}.png?key={key}',
+  TILE_LABELS: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_only_labels/{z}/{x}/{y}{r}.png?key={key}',
   ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者 &copy; <a href="https://carto.com/attributions">CARTO</a>',
 };
 
@@ -348,14 +351,14 @@ function initMap() {
 
   // 主圖層：CARTO 淺色無標籤
   L.tileLayer(CONFIG.TILE_BASE, {
-    subdomains: 'abcd', maxZoom: 19, attribution: CONFIG.ATTRIBUTION,
+    subdomains: 'abcd', maxZoom: 19, attribution: CONFIG.ATTRIBUTION, key: CONFIG.CARTO_API_KEY,
   }).addTo(map);
 
   // 純標籤圖層放在獨立 pane：高於熱力圖、低於跑點標記，且不攔截點擊
   map.createPane('labels');
   map.getPane('labels').style.zIndex = 450;
   map.getPane('labels').style.pointerEvents = 'none';
-  labelLayer = L.tileLayer(CONFIG.TILE_LABELS, { subdomains: 'abcd', maxZoom: 19, pane: 'labels' });
+  labelLayer = L.tileLayer(CONFIG.TILE_LABELS, { subdomains: 'abcd', maxZoom: 19, pane: 'labels', key: CONFIG.CARTO_API_KEY });
 
   map.on('zoomend', updateLabelLayer);
   updateLabelLayer();
