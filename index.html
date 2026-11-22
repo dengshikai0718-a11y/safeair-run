@@ -213,7 +213,7 @@ button { font: inherit; color: inherit; }
 .heat-legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .heat-legend li { display: flex; align-items: center; gap: 8px; }
 .heat-legend .sw { width: 20px; height: 14px; border-radius: 3px; border: 1px solid var(--line); flex: none; }
-.heat-legend .sw.blank { background: repeating-linear-gradient(45deg, #fff 0 3px, var(--line) 3px 4px); }
+.heat-legend .sw.blank { background: repeating-linear-gradient(45deg, #fff 0 5px, #CBD5E1 5px 6px); }
 .heat-legend .note { margin: 8px 0 0; font-size: 12px; color: var(--text-2); line-height: 1.5; }
 /* 窄螢幕：搜尋列（高 48px）下方右側，單一圓形按鈕（圖例收在其面板內） */
 @media (max-width: 767.98px) {
@@ -333,8 +333,8 @@ const CONFIG = {
   PM25_MIN: 0,               // PM2.5 有效範圍下限：≤ 0 排除（0 值多為感測異常，見 lassAdapter 註解）
   PM25_MAX: 500,             // PM2.5 有效範圍上限（> 500 排除）
   MIN_VALID_STATIONS: 2,     // 台北範圍內有效測站 < 2 時改用 Mock
-  IDW: { power: 2, snapM: 50, radiiM: [3000, 5000] }, // IDW：p=2、<50m 直接採用、3km → 5km
-  HEAT: { cellM: 75, maxRadiusM: 3000, opacity: 0.35, hatchOpacity: 0.55 }, // 熱力圖：75 m 細格直接 IDW、最近測站 > 3 km 即留白（畫斜線）、色塊透明度 0.35
+  IDW: { power: 2, snapM: 50, radiiM: [3000, 5000] }, // IDW：p=2、<50m 直接採用；3 km 決定熱力圖是否留白、5 km 決定資訊卡是否標示「附近無測站」（皆不影響數值）
+  HEAT: { cellM: 75, opacity: 0.35, hatchOpacity: 0.8 }, // 熱力圖：75 m 細格、色塊透明度 0.35、斜線透明度 0.8
   TAIPEI_UTC_OFFSET_H: 8,    // 台灣無日光節約時間，固定 UTC+8
   OPEN_METEO_URL: 'https://api.open-meteo.com/v1/forecast',
   // CARTO 底圖金鑰（CARTO 已改為需要免費 API 金鑰，否則回傳「API KEY REQUIRED」浮水印圖磚）。
@@ -410,13 +410,14 @@ const MOCK_STATIONS = [
   { id: 'm15', name: '象山',   lat: 25.027, lng: 121.576, pm: 7 },
   { id: 'm16', name: '大安',   lat: 25.026, lng: 121.543, pm: 11 },
   { id: 'm17', name: '公館',   lat: 25.014, lng: 121.534, pm: 13 },
-  { id: 'm18', name: '中正',   lat: 25.032, lng: 121.519, pm: 17 },
-  { id: 'm19', name: '萬華',   lat: 25.035, lng: 121.500, pm: 27 },
-  { id: 'm20', name: '南機場', lat: 25.023, lng: 121.507, pm: 33 },
+  { id: 'm18', name: '中正',   lat: 25.032, lng: 121.519, pm: 13 },
+  { id: 'm19', name: '萬華',   lat: 25.035, lng: 121.500, pm: 38 },
+  { id: 'm20', name: '南機場', lat: 25.023, lng: 121.507, pm: 43 },
   { id: 'm21', name: '景美',   lat: 24.993, lng: 121.541, pm: 9 },
   { id: 'm22', name: '木柵',   lat: 24.987, lng: 121.555, pm: 8 },
   { id: 'm23', name: '文山',   lat: 24.998, lng: 121.581, pm: 6 },
   { id: 'm24', name: '陽明山', lat: 25.155, lng: 121.545, pm: 5 },
+  { id: 'm25', name: '華江',   lat: 25.027, lng: 121.497, pm: 40 }, // 與萬華、南機場一起讓青年公園周圍形成肉眼可見的高值區
 ];
 
 const MOCK_SCENARIOS = {
@@ -821,24 +822,61 @@ function getSourceStatus() {
 }
 
 /* =====================================================================
-   §4 演算法：台北市外框、IDW 反距離加權
+   §4 演算法：台北市外框、IDW 反距離加權（跑點與熱力圖共用）
    ===================================================================== */
 
 /**
- * 台北市行政區外框（手繪簡化多邊形，[緯度, 經度]，順時針自關渡起）。
- * 僅用於：① 熱力圖裁切（市界外不著色）② 「全市平均」只計入市內測站。
- * 精度約數百公尺，非官方界線，不可用於行政區判定。
+ * 台北市行政區外框（[緯度, 經度]，順時針），取自 OpenStreetMap 臺北市行政邊界（© OpenStreetMap 貢獻者，ODbL），
+ * 以 Douglas–Peucker 簡化（容差約 80 m）後內嵌，沿淡水河、新店溪、景美溪。
+ * 僅用於熱力圖裁切（市界外不著色）；精度約百公尺，不可用於行政區判定。
  */
 const TAIPEI_OUTLINE = [
-  [25.1180, 121.4600], [25.1330, 121.4700], [25.1500, 121.4880], [25.1650, 121.5000],
-  [25.1800, 121.5080], [25.2000, 121.5250], [25.2090, 121.5450], [25.2050, 121.5700],
-  [25.1880, 121.5850], [25.1650, 121.6000], [25.1400, 121.6050], [25.1150, 121.6100],
-  [25.0950, 121.6050], [25.0850, 121.6200], [25.0680, 121.6350], [25.0500, 121.6300],
-  [25.0350, 121.6200], [25.0280, 121.6150], [25.0100, 121.6180], [24.9900, 121.6200],
-  [24.9700, 121.6050], [24.9600, 121.5850], [24.9680, 121.5600], [24.9800, 121.5400],
-  [24.9950, 121.5250], [25.0050, 121.5100], [25.0100, 121.5000], [25.0250, 121.4960],
-  [25.0450, 121.4930], [25.0620, 121.4950], [25.0800, 121.4900], [25.1000, 121.4750],
-  [25.1050, 121.4600],
+  [25.1080, 121.4571], [25.1039, 121.4613], [25.1017, 121.4662], [25.1009, 121.4814],
+  [25.0970, 121.4890], [25.0872, 121.4998], [25.0753, 121.5059], [25.0697, 121.5070],
+  [25.0594, 121.5054], [25.0540, 121.5063], [25.0497, 121.5049], [25.0451, 121.5003],
+  [25.0428, 121.4957], [25.0418, 121.4879], [25.0369, 121.4837], [25.0232, 121.4889],
+  [25.0157, 121.4890], [25.0111, 121.4905], [25.0092, 121.4934], [25.0094, 121.4956],
+  [25.0119, 121.5001], [25.0211, 121.5084], [25.0218, 121.5106], [25.0198, 121.5191],
+  [25.0117, 121.5258], [25.0093, 121.5314], [25.0078, 121.5324], [25.0031, 121.5342],
+  [25.0010, 121.5314], [24.9979, 121.5306], [24.9905, 121.5317], [24.9951, 121.5352],
+  [24.9928, 121.5369], [24.9885, 121.5370], [24.9881, 121.5441], [24.9836, 121.5454],
+  [24.9837, 121.5490], [24.9853, 121.5508], [24.9870, 121.5509], [24.9869, 121.5523],
+  [24.9845, 121.5539], [24.9801, 121.5531], [24.9773, 121.5539], [24.9647, 121.5613],
+  [24.9640, 121.5727], [24.9669, 121.5746], [24.9666, 121.5787], [24.9632, 121.5857],
+  [24.9642, 121.5934], [24.9616, 121.5948], [24.9605, 121.5972], [24.9631, 121.6083],
+  [24.9675, 121.6169], [24.9672, 121.6196], [24.9703, 121.6196], [24.9735, 121.6144],
+  [24.9746, 121.6112], [24.9744, 121.6052], [24.9782, 121.5995], [24.9803, 121.6006],
+  [24.9865, 121.5998], [24.9878, 121.6018], [24.9904, 121.6020], [24.9917, 121.5991],
+  [24.9945, 121.5981], [24.9984, 121.6006], [25.0012, 121.6004], [25.0043, 121.5977],
+  [25.0045, 121.5959], [25.0147, 121.5974], [25.0152, 121.6027], [25.0191, 121.6042],
+  [25.0194, 121.6082], [25.0210, 121.6093], [25.0199, 121.6102], [25.0197, 121.6161],
+  [25.0184, 121.6175], [25.0173, 121.6233], [25.0199, 121.6289], [25.0256, 121.6324],
+  [25.0232, 121.6357], [25.0246, 121.6430], [25.0217, 121.6464], [25.0240, 121.6501],
+  [25.0244, 121.6538], [25.0227, 121.6628], [25.0247, 121.6649], [25.0299, 121.6659],
+  [25.0304, 121.6608], [25.0274, 121.6551], [25.0286, 121.6480], [25.0280, 121.6468],
+  [25.0294, 121.6458], [25.0357, 121.6335], [25.0351, 121.6302], [25.0367, 121.6295],
+  [25.0377, 121.6249], [25.0404, 121.6216], [25.0480, 121.6165], [25.0507, 121.6164],
+  [25.0537, 121.6210], [25.0565, 121.6203], [25.0555, 121.6243], [25.0614, 121.6208],
+  [25.0639, 121.6161], [25.0659, 121.6168], [25.0652, 121.6179], [25.0676, 121.6176],
+  [25.0696, 121.6215], [25.0732, 121.6206], [25.0780, 121.6249], [25.0788, 121.6251],
+  [25.0782, 121.6239], [25.0803, 121.6243], [25.0833, 121.6280], [25.0881, 121.6282],
+  [25.0937, 121.6251], [25.0961, 121.6262], [25.0974, 121.6220], [25.1039, 121.6154],
+  [25.1095, 121.5975], [25.1141, 121.5956], [25.1218, 121.6008], [25.1260, 121.6017],
+  [25.1259, 121.6044], [25.1302, 121.6078], [25.1308, 121.6046], [25.1367, 121.6057],
+  [25.1362, 121.6041], [25.1403, 121.5984], [25.1435, 121.5957], [25.1501, 121.5938],
+  [25.1524, 121.5894], [25.1559, 121.5918], [25.1637, 121.5899], [25.1630, 121.5881],
+  [25.1672, 121.5770], [25.1703, 121.5775], [25.1772, 121.5833], [25.1820, 121.5809],
+  [25.1836, 121.5829], [25.1864, 121.5819], [25.1888, 121.5840], [25.1930, 121.5827],
+  [25.1946, 121.5838], [25.1954, 121.5717], [25.1982, 121.5700], [25.1997, 121.5661],
+  [25.2095, 121.5627], [25.2103, 121.5592], [25.2085, 121.5549], [25.2044, 121.5533],
+  [25.2037, 121.5516], [25.2007, 121.5528], [25.1979, 121.5521], [25.1971, 121.5508],
+  [25.1981, 121.5482], [25.1957, 121.5449], [25.1938, 121.5433], [25.1893, 121.5429],
+  [25.1872, 121.5407], [25.1867, 121.5359], [25.1837, 121.5333], [25.1831, 121.5262],
+  [25.1793, 121.5219], [25.1747, 121.5226], [25.1693, 121.5199], [25.1710, 121.5136],
+  [25.1694, 121.5104], [25.1711, 121.5058], [25.1732, 121.5049], [25.1733, 121.5026],
+  [25.1693, 121.5018], [25.1683, 121.5001], [25.1648, 121.4986], [25.1604, 121.4924],
+  [25.1514, 121.4874], [25.1502, 121.4829], [25.1315, 121.4656], [25.1276, 121.4643],
+  [25.1243, 121.4648], [25.1229, 121.4588], [25.1162, 121.4609],
 ];
 
 /** 射線法：判斷座標是否在多邊形內（poly 為 [lat, lng] 陣列） */
@@ -852,36 +890,41 @@ function pointInPolygon(lat, lng, poly = TAIPEI_OUTLINE) {
 }
 
 /**
- * IDW 估算指定座標的 PM2.5。
- * - 與某測站距離 < snapM（50 m）：直接採用該測站數值。
- * - 依序在 radiiM（3 km → 5 km）內找測站，權重 w = 1 / d^p（p = 2）做加權平均。
- * - 都沒有測站：若 cityAvg 為 true，採用台北市全部有效測站平均；否則回傳 null（熱力圖留白用）。
- * 回傳 { value, method: 'snap' | 'idw' | 'cityAvg', radiusM, n } 或 null。
+ * IDW 估算指定座標的 PM2.5（跑點、使用者位置、熱力圖共用此函式，規則只有一套）。
+ * - 數值：一律使用「全部有效測站」的反距離加權，w = 1 / d^p（p = 2）；
+ *   與最近測站距離 < snapM（50 m）時直接採用該測站數值。
+ * - 距離遠近只影響「是否有把握」，不影響數值：
+ *     coverage 'near'（最近測站 ≤ 3 km）：熱力圖有資料；
+ *     coverage 'far'（3–5 km）：熱力圖留白，資訊卡仍正常顯示；
+ *     coverage 'none'（> 5 km）：熱力圖留白，資訊卡標示「附近無測站，以全市測站估算」。
+ * - 距離用等距圓柱近似（誤差 < 0.1%，台北範圍內足夠），熱力圖每格都呼叫，需要快。
+ * 回傳 { value, method: 'snap' | 'idw', nearestM, coverage, n } 或 null（沒有任何測站）。
  */
 function idwEstimate(lat, lng, stations, {
-  power = CONFIG.IDW.power, snapM = CONFIG.IDW.snapM, radiiM = CONFIG.IDW.radiiM, cityAvg = true,
+  power = CONFIG.IDW.power, snapM = CONFIG.IDW.snapM, radiiM = CONFIG.IDW.radiiM,
 } = {}) {
-  if (!stations || stations.length === 0) return null;
-  const withD = stations.map((st) => ({ st, d: haversine(lat, lng, st.lat, st.lng) }));
-  let nearest = withD[0];
-  for (const x of withD) if (x.d < nearest.d) nearest = x;
-  if (nearest.d < snapM) return { value: round(nearest.st.pm25), method: 'snap', radiusM: 0, n: 1 };
-
-  for (const r of radiiM) {
-    let sw = 0, swv = 0, n = 0;
-    for (const { st, d } of withD) {
-      if (d > r) continue;
-      const w = 1 / d ** power;
-      sw += w; swv += w * st.pm25; n++;
-    }
-    if (n > 0) return { value: round(swv / sw), method: 'idw', radiusM: r, n };
+  const n = stations ? stations.length : 0;
+  if (n === 0) return null;
+  const kx = 111320 * Math.cos(lat * Math.PI / 180), ky = 110950;
+  const half = power / 2;
+  let best = Infinity, bestPm = NaN, sw = 0, sv = 0;
+  for (let i = 0; i < n; i++) {
+    const st = stations[i];
+    const dy = (st.lat - lat) * ky, dx = (st.lng - lng) * kx;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < best) { best = d2; bestPm = st.pm25; }
+    const w = d2 === 0 ? 1e12 : (half === 1 ? 1 / d2 : d2 ** -half);
+    sw += w; sv += w * st.pm25;
   }
-  if (!cityAvg) return null;
-  // 全市平均：只計入台北市外框多邊形內的測站（範圍框內但在市外的測站不採計）
-  const inCity = stations.filter((st) => pointInPolygon(st.lat, st.lng));
-  if (inCity.length === 0) return null;
-  const avg = inCity.reduce((a, st) => a + st.pm25, 0) / inCity.length;
-  return { value: round(avg), method: 'cityAvg', radiusM: null, n: inCity.length };
+  const nearestM = Math.sqrt(best);
+  const snapped = nearestM < snapM;
+  return {
+    value: round(snapped ? bestPm : sv / sw),
+    method: snapped ? 'snap' : 'idw',
+    nearestM,
+    coverage: nearestM <= radiiM[0] ? 'near' : nearestM <= radiiM[1] ? 'far' : 'none',
+    n,
+  };
 }
 
 /* =====================================================================
@@ -1029,6 +1072,28 @@ function runTests() {
                    actual: classifyIndicator('pm25', heatValueAt(sp.lat, sp.lng)),
                    ok: classifyIndicator('pm25', heatValueAt(sp.lat, sp.lng)) === classifyIndicator('pm25', reading.pm25) });
     }
+  }
+  // 熱力圖與 idwEstimate 一致：固定種子抽 50 個市界內座標，該細格的熱力圖等級必須等於 idwEstimate 的等級
+  // （最近測站 > 3 km 者熱力圖應為留白）
+  if (state.data && heatField) {
+    let seed = 20240607;
+    const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+                        x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+    const lats = TAIPEI_OUTLINE.map((q) => q[0]), lngs = TAIPEI_OUTLINE.map((q) => q[1]);
+    const [la0, la1, ln0, ln1] = [Math.min(...lats), Math.max(...lats), Math.min(...lngs), Math.max(...lngs)];
+    let bad = 0, checked = 0, blanks = 0;
+    while (checked < 50) {
+      const la = la0 + rnd() * (la1 - la0), ln = ln0 + rnd() * (ln1 - ln0);
+      if (!pointInPolygon(la, ln)) continue;
+      checked++;
+      const px = heatPixelAt(la, ln);
+      const est = idwEstimate(px.lat, px.lng, state.data.pm.stations);
+      const wantBlank = est.nearestM > CONFIG.IDW.radiiM[0];
+      if (wantBlank) blanks++;
+      const okPt = wantBlank ? px.value === null : classifyIndicator('pm25', px.value) === classifyIndicator('pm25', est.value);
+      if (!okPt) bad++;
+    }
+    cases.push({ name: `熱力圖等級 = idwEstimate 等級（隨機 50 點，其中留白 ${blanks} 點）`, expected: 0, actual: bad, ok: bad === 0 });
   }
   const failed = cases.filter((c) => !c.ok);
   console.log(`SafeAir 判定測試：${cases.length - failed.length} / ${cases.length} 通過`);
@@ -1373,16 +1438,14 @@ let heatField = null;   // 最近一次計算的數值場（供測試與 heatVal
 /**
  * 計算熱力圖數值場，並畫成兩張 canvas（色塊、無資料斜線）。
  *
- * 作法：在台北市外框的外接矩形內，以 HEAT.cellM（75 m）的細格逐格做 IDW，不再先算 300 m 網格再內插。
- * 原因：300 m 網格的節點不會剛好落在測站上，測站附近的峰值（例如青年公園 38 μg/m³）
- * 會被相鄰節點平均壓低一級；細格直接取值，測站 50 m 內仍採用該測站數值（與跑點的 snap 規則一致）。
- * - 有值與否：最近測站 ≤ 3 km 才上色，否則留白（無資料）。
- * - 數值：納入範圍框內全部有效測站做 IDW（距離越遠權重越小，數值在 3 km 邊界連續），
- *   不再只取 3 km 內測站，避免邊界上「只剩一站」造成孤立色塊。
+ * 作法：在台北市外框的外接矩形內，以 HEAT.cellM（75 m）的細格逐格呼叫 idwEstimate（與跑點共用，規則只有一套）。
+ * 不先算 300 m 網格再內插：300 m 網格的節點不會剛好落在測站上，測站附近的峰值會被相鄰節點平均壓低一級。
+ * - 數值：全部有效測站的 IDW（測站 50 m 內採用該測站數值）。
+ * - 留白：最近測站 > 3 km 的格點不上色，改在市界內畫淡灰斜線。
  * - 色塊依 PM2.5 門檻離散上色，再以市界多邊形裁切；畫布垂直方向以 Web Mercator 對應，才能與 imageOverlay 對齊。
  */
 function buildHeatField(stations) {
-  const { HEAT, IDW } = CONFIG;
+  const { HEAT } = CONFIG;
   const lats = TAIPEI_OUTLINE.map((q) => q[0]), lngs = TAIPEI_OUTLINE.map((q) => q[1]);
   const pad = 0.002;
   const minLat = Math.min(...lats) - pad, maxLat = Math.max(...lats) + pad;
@@ -1394,35 +1457,20 @@ function buildHeatField(stations) {
   const unmerc = (y) => (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI;
   const yTop = merc(maxLat), yBot = merc(minLat);
 
-  const n = stations.length;
-  const sLat = Float64Array.from(stations, (q) => q.lat);
-  const sLng = Float64Array.from(stations, (q) => q.lng);
-  const sPm = Float64Array.from(stations, (q) => q.pm25);
-  const snap2 = IDW.snapM ** 2, max2 = HEAT.maxRadiusM ** 2, half = IDW.power / 2;
-
-  const values = new Float32Array(W * H).fill(NaN);
+  const values = new Float64Array(W * H).fill(NaN);
   const img = new ImageData(W, H);
   const blank = new ImageData(W, H); // 無資料遮罩（alpha 255 = 無資料）
   let filled = 0;
   for (let py = 0; py < H; py++) {
     const lat = unmerc(yTop - (py + 0.5) / H * (yTop - yBot));
-    const kx = 111320 * Math.cos(lat * Math.PI / 180);
     for (let px = 0; px < W; px++) {
       const lng = minLng + (px + 0.5) / W * (maxLng - minLng);
-      let best = Infinity, bestPm = NaN, sw = 0, sv = 0;
-      for (let k = 0; k < n; k++) {
-        const dy = (sLat[k] - lat) * 110950, dx = (sLng[k] - lng) * kx;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < best) { best = d2; bestPm = sPm[k]; }
-        const w = d2 === 0 ? 1e12 : d2 ** -half;
-        sw += w; sv += w * sPm[k];
-      }
+      const est = idwEstimate(lat, lng, stations); // 與跑點共用同一個函式
       const o = (py * W + px) * 4;
-      if (best > max2) { blank.data[o + 3] = 255; continue; } // 3 km 內無測站：留白
-      const v = best < snap2 ? bestPm : sv / sw;
-      values[py * W + px] = v;
+      if (!est || est.nearestM > CONFIG.IDW.radiiM[0]) { blank.data[o + 3] = 255; continue; } // 最近測站 > 3 km：留白
+      values[py * W + px] = est.value;
       filled++;
-      const c = HEAT_COLORS[classifyIndicator('pm25', v)];
+      const c = HEAT_COLORS[classifyIndicator('pm25', est.value)];
       img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
     }
   }
@@ -1452,27 +1500,36 @@ function buildHeatField(stations) {
   const hatch = document.createElement('canvas'); hatch.width = hw; hatch.height = hh;
   ctx = hatch.getContext('2d');
   clipPath(ctx, HS); ctx.clip();
-  ctx.strokeStyle = '#64748B'; ctx.lineWidth = 1.6;
+  ctx.strokeStyle = '#CBD5E1'; ctx.lineWidth = 1.2; // 淡灰細線（約 1px），避免像警告區
   ctx.beginPath();
-  for (let x = -hh; x < hw; x += 9) { ctx.moveTo(x, hh); ctx.lineTo(x + hh, 0); }
+  for (let x = -hh; x < hw; x += 16) { ctx.moveTo(x, hh); ctx.lineTo(x + hh, 0); }
   ctx.stroke();
   ctx.globalCompositeOperation = 'destination-in';
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(toCanvas(blank, W, H), 0, 0, hw, hh);
 
-  return { W, H, minLat, maxLat, minLng, maxLng, yTop, yBot, merc, values, filled,
+  return { W, H, minLat, maxLat, minLng, maxLng, yTop, yBot, merc, unmerc, values, filled,
            bounds: [[minLat, minLng], [maxLat, maxLng]], color, hatch };
 }
 
-/** 讀取熱力圖在指定座標的數值（μg/m³）；市外或留白回傳 null。測試「熱力圖等級 = 跑點 PM2.5 燈號」用 */
-function heatValueAt(lat, lng) {
+/**
+ * 讀取熱力圖在指定座標所在細格的資料：回傳 { value, lat, lng }（lat / lng 為該細格中心）。
+ * 留白為 value = null；超出熱力圖範圍回傳 null。測試用（熱力圖等級 = idwEstimate 等級）。
+ */
+function heatPixelAt(lat, lng) {
   const f = heatField;
   if (!f) return null;
   const px = Math.floor((lng - f.minLng) / (f.maxLng - f.minLng) * f.W);
   const py = Math.floor((f.yTop - f.merc(lat)) / (f.yTop - f.yBot) * f.H);
   if (px < 0 || py < 0 || px >= f.W || py >= f.H) return null;
   const v = f.values[py * f.W + px];
-  return Number.isNaN(v) ? null : v;
+  const cLat = f.unmerc(f.yTop - (py + 0.5) / f.H * (f.yTop - f.yBot));
+  const cLng = f.minLng + (px + 0.5) / f.W * (f.maxLng - f.minLng);
+  return { value: Number.isNaN(v) ? null : v, lat: cLat, lng: cLng };
+}
+function heatValueAt(lat, lng) {
+  const px = heatPixelAt(lat, lng);
+  return px ? px.value : null;
 }
 
 /** 資料更新後重新計算熱力圖（只在 refreshData 呼叫；開關不會重算） */
@@ -1553,7 +1610,7 @@ window.SafeAir = {
   RUN_SPOTS, CONFIG, PM25_SOURCES, state, haversine, selectSpot,
   idwEstimate, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
-  pointInPolygon, TAIPEI_OUTLINE, setHeatmap, getHeatStats: () => heatField && heatField.stats, heatValueAt,
+  pointInPolygon, TAIPEI_OUTLINE, setHeatmap, getHeatStats: () => heatField && heatField.stats, heatValueAt, heatPixelAt, buildHeatField,
 };
 
 bootstrap();
