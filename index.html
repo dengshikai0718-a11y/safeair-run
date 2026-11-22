@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F8FAFC">
+<title>SafeAir Run</title>
+<meta name="description" content="慢跑場域環境查詢：依 PM2.5、降雨機率、紫外線與體感溫度判斷台北跑點是否適合出發。">
+<!-- 唯一的外部依賴：Leaflet 1.9.4（鎖定版本，附 SRI 完整性校驗） -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+/* =====================================================================
+   §S1 設計 Token
+   ===================================================================== */
+:root {
+  --bg: #F8FAFC;            /* 背景主色 Slate-50 */
+  --surface: #FFFFFF;       /* 容器底色 */
+  --text: #0F172A;          /* 文字主色 Slate-900 */
+  --text-2: #475569;        /* 次要文字 Slate-600 */
+  --line: #E2E8F0;          /* 分隔線 Slate-200 */
+  --hover: #F1F5F9;         /* 滑過底色 Slate-100 */
+  --focus: #2563EB;         /* 鍵盤焦點框 */
+  --user: #2563EB;          /* 使用者位置藍點 */
+
+  /* 三級狀態＋資料不足：500 色系（圖示/標記/色塊）、深色（文字）、淡底（標籤底色） */
+  --green: #10B981;  --green-text: #047857;  --green-bg: #ECFDF5;
+  --yellow: #F59E0B; --yellow-text: #B45309; --yellow-bg: #FFFBEB;
+  --red: #EF4444;    --red-text: #B91C1C;    --red-bg: #FEF2F2;
+  --gray: #94A3B8;   --gray-text: #475569;   --gray-bg: #F1F5F9;
+
+  --font: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+  --radius: 12px;
+  --shadow: 0 4px 16px rgba(15, 23, 42, .12);
+  --sidebar-w: 380px;
+  --sheet-offset: 16px;     /* 地圖右下控制項距底部（窄螢幕會隨 Bottom Sheet 高度調整） */
+  --touch: 44px;            /* 最小觸控區域 */
+}
+
+/* =====================================================================
+   §S2 版面骨架（Mobile-first，斷點 768px）
+   ===================================================================== */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor;
+        stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+           overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+#app { position: relative; height: 100%; display: flex; }
+#mapWrap { position: relative; flex: 1; min-width: 0; height: 100%; }
+#map { position: absolute; inset: 0; background: var(--bg); }
+
+/* 窄螢幕：側邊欄隱藏，地圖全螢幕 */
+#sidebar { display: none; }
+
+/* 寬螢幕：左側固定側邊欄 380px，其餘鋪滿地圖 */
+@media (min-width: 768px) {
+  #sidebar {
+    display: flex; flex-direction: column;
+    width: var(--sidebar-w); flex: none; height: 100%;
+    background: var(--surface); border-right: 1px solid var(--line);
+    z-index: 1000; /* 高於 Leaflet 控制項 */
+  }
+}
+
+/* =====================================================================
+   §S3 元件：側邊欄、跑點列表、狀態標籤
+   ===================================================================== */
+.sb-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 17px; }
+.brand-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--green);
+              display: grid; place-items: center; color: #fff; }
+.brand-mark .icon { width: 18px; height: 18px; }
+.sb-section-title { margin: 0; padding: 14px 20px 6px; font-size: 13px; font-weight: 600;
+                    color: var(--text-2); letter-spacing: .02em; }
+.sb-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+
+.spot-list { list-style: none; margin: 0; padding: 0 8px 16px; }
+.spot-item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  min-height: 56px; padding: 8px 12px; border: 0; border-radius: 10px;
+  background: transparent; text-align: left; cursor: pointer;
+}
+.spot-item:hover { background: var(--hover); }
+.spot-item[aria-current="true"] { background: var(--hover); box-shadow: inset 3px 0 0 var(--text); }
+.spot-item .meta { flex: 1; min-width: 0; }
+.spot-item .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spot-item .sub { font-size: 13px; color: var(--text-2); }
+.spot-item .dist { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+
+/* 狀態圓形徽章（色塊＋白色圖示），用於列表與標記 */
+.status-dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+              color: #fff; flex: none; }
+.status-dot .icon { width: 16px; height: 16px; stroke-width: 2.5; }
+.st-green  { --st: var(--green);  --st-text: var(--green-text);  --st-bg: var(--green-bg); }
+.st-yellow { --st: var(--yellow); --st-text: var(--yellow-text); --st-bg: var(--yellow-bg); }
+.st-red    { --st: var(--red);    --st-text: var(--red-text);    --st-bg: var(--red-bg); }
+.st-unknown{ --st: var(--gray);   --st-text: var(--gray-text);   --st-bg: var(--gray-bg); }
+.status-dot { background: var(--st); }
+
+/* =====================================================================
+   §S4 窄螢幕頂部懸浮列（第 5 階段改為搜尋欄）
+   ===================================================================== */
+#mobileTop {
+  position: absolute; z-index: 1000; top: calc(12px + env(safe-area-inset-top)); left: 12px; right: 12px;
+  display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px;
+  background: var(--surface); border-radius: 24px; box-shadow: var(--shadow);
+}
+@media (min-width: 768px) { #mobileTop { display: none; } }
+
+/* =====================================================================
+   §S5 地圖：跑點標記、使用者位置、控制按鈕
+   ===================================================================== */
+.leaflet-container { font-family: var(--font); }
+.leaflet-bottom { bottom: var(--sheet-offset); transition: bottom .25s ease; }
+.leaflet-control-attribution { font-size: 11px; }
+
+.spot-marker { background: none; border: 0; }
+.spot-marker .pin {
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--st); color: #fff; border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, .35); transition: transform .15s ease;
+}
+.spot-marker .pin .icon { width: 18px; height: 18px; stroke-width: 2.5; }
+.spot-marker.is-selected .pin { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(15, 23, 42, .25), 0 2px 6px rgba(15, 23, 42, .35); }
+
+/* 使用者位置：藍色圓點＋外圈脈動 */
+.user-marker { background: none; border: 0; }
+.user-marker .dot { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+                    border-radius: 50%; background: var(--user); border: 3px solid #fff;
+                    box-shadow: 0 1px 4px rgba(15, 23, 42, .4); }
+.user-marker .pulse { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+                      border-radius: 50%; background: rgba(37, 99, 235, .35); animation: pulse 2s ease-out infinite; }
+@keyframes pulse { from { transform: scale(1); opacity: .9; } to { transform: scale(3.5); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .user-marker .pulse { animation: none; transform: scale(2); opacity: .4; } }
+
+/* 地圖圓形按鈕（觸控區域 ≥ 44×44） */
+.map-btn {
+  width: var(--touch); height: var(--touch); border: 0; border-radius: 50%;
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow);
+  display: grid; place-items: center; cursor: pointer;
+}
+.map-btn:hover { background: var(--hover); }
+.leaflet-control.map-btn { margin-right: 12px; }
+.leaflet-touch .leaflet-bar a { width: 36px; height: 36px; line-height: 36px; }
+
+/* =====================================================================
+   §S6 小提示（Toast）
+   ===================================================================== */
+#toast {
+  position: absolute; z-index: 1100; left: 50%; bottom: calc(var(--sheet-offset) + 72px);
+  transform: translate(-50%, 8px); max-width: calc(100% - 32px);
+  padding: 10px 16px; border-radius: 10px; background: var(--text); color: #fff; font-size: 14px;
+  opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+
+<!-- =====================================================================
+     內嵌 SVG 圖示（不引用外部圖示庫；線條風格 24×24）
+     ===================================================================== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12.5l2.7 2.7L16 9.8"/></symbol>
+  <symbol id="i-alert-triangle" viewBox="0 0 24 24"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-help-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+  <symbol id="i-run" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="1.8"/><path d="M8 21l3-6 3 2v5"/><path d="M6 12l2-4 4-1 3 3 3 1"/><path d="M11 15l1-5"/></symbol>
+</svg>
+
+<div id="app">
+  <!-- 寬螢幕側邊欄：搜尋欄 → 資訊卡 → 跑點列表（搜尋與資訊卡於第 5 階段加入） -->
+  <aside id="sidebar" aria-label="跑點資訊">
+    <div class="sb-header">
+      <div class="brand"><span class="brand-mark"><svg class="icon"><use href="#i-run"/></svg></span>SafeAir Run</div>
+    </div>
+    <div class="sb-scroll">
+      <h2 class="sb-section-title">跑點列表</h2>
+      <ul id="spotList" class="spot-list"></ul>
+    </div>
+  </aside>
+
+  <main id="mapWrap">
+    <div id="map" role="application" aria-label="跑點地圖"></div>
+    <!-- 窄螢幕頂部懸浮列（第 5 階段改為搜尋欄） -->
+    <div id="mobileTop">
+      <div class="brand"><span class="brand-mark"><svg class="icon"><use href="#i-run"/></svg></span>SafeAir Run</div>
+    </div>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+'use strict';
+
+/* =====================================================================
+   §1 資料：跑點資料集（放在最前面；新增跑點只需在此陣列加一筆）
+   ---------------------------------------------------------------------
+   結構：{ id, name, district, type, lat, lng, desc }
+   - type：'riverside'（河濱）或 'park'（公園）
+   - lat / lng 已由使用者核對，請勿修改
+   ===================================================================== */
+const RUN_SPOTS = [
+  { id: 1, name: '大安森林公園',     district: '大安區', type: 'park',      lat: 25.02970, lng: 121.53629,
+    desc: '市中心大型林蔭公園，環狀步道平坦、遮蔭充足' },
+  { id: 2, name: '大佳河濱公園',     district: '中山區', type: 'riverside', lat: 25.07471, lng: 121.54111,
+    desc: '沿基隆河岸，視野開闊、少紅綠燈' },
+  { id: 3, name: '國立中正紀念堂',   district: '中正區', type: 'park',      lat: 25.03556, lng: 121.52024,
+    desc: '廣場與外圍環狀步道，地勢平坦、夜間照明佳' },
+  { id: 4, name: '花博公園新生園區', district: '中山區', type: 'park',      lat: 25.06999, lng: 121.53124,
+    desc: '園區步道串連花圃與草坪，動線寬敞、適合輕鬆跑' },
+  { id: 5, name: '青年公園',         district: '萬華區', type: 'park',      lat: 25.02306, lng: 121.50526,
+    desc: '設有田徑場與林蔭步道，適合繞圈練跑' },
+];
+
+/* =====================================================================
+   §0 設定常數（集中管理，其餘程式不寫死數值）
+   ===================================================================== */
+const CONFIG = {
+  // 台北市範圍框（測站篩選、熱力圖網格使用）
+  BBOX: { minLng: 121.45, maxLng: 121.67, minLat: 24.96, maxLat: 25.21 },
+  // 定位失敗時的預設中心：台北車站，縮放 12
+  DEFAULT_CENTER: [25.0478, 121.5170],
+  DEFAULT_ZOOM: 12,
+  LOCATED_ZOOM: 14,          // 取得定位後的縮放等級
+  SPOT_ZOOM: 15,             // 選取跑點時的縮放等級
+  LABEL_MIN_ZOOM: 14,        // 縮放 ≥ 14 疊加 CARTO 純標籤圖層
+  GEO_TIMEOUT_MS: 10000,     // 定位逾時
+  TILE_BASE: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}{r}.png',
+  TILE_LABELS: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_only_labels/{z}/{x}/{y}{r}.png',
+  ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者 &copy; <a href="https://carto.com/attributions">CARTO</a>',
+};
+
+// 跑點類型的中文顯示
+const SPOT_TYPE_LABEL = { riverside: '河濱', park: '公園' };
+
+// 狀態外觀（色彩＋圖示＋繁體文字三者同時出現）；判定邏輯於第 3 階段實作
+const STATUS_META = {
+  green:   { cls: 'st-green',   icon: 'i-check-circle',   label: '適合出發' },
+  yellow:  { cls: 'st-yellow',  icon: 'i-alert-triangle', label: '建議留意' },
+  red:     { cls: 'st-red',     icon: 'i-x-circle',       label: '不建議前往' },
+  unknown: { cls: 'st-unknown', icon: 'i-help-circle',    label: '資料不足' },
+};
+
+/* =====================================================================
+   §2 工具函式
+   ===================================================================== */
+
+/** Haversine 公式：計算兩點球面直線距離（公尺） */
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371008.8; // 地球平均半徑（公尺）
+  const toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/** 距離顯示：一律以公里、一位小數（例：1.2 公里） */
+function formatKm(meters) {
+  return (meters / 1000).toFixed(1) + ' 公里';
+}
+
+/** 判斷座標是否在台北市範圍框內 */
+function inBBox(lat, lng, bbox = CONFIG.BBOX) {
+  return lat >= bbox.minLat && lat <= bbox.maxLat && lng >= bbox.minLng && lng <= bbox.maxLng;
+}
+
+/** 產生圖示 SVG 字串（引用上方內嵌 symbol） */
+function iconSvg(id, extraClass = '') {
+  return `<svg class="icon ${extraClass}" aria-hidden="true"><use href="#${id}"/></svg>`;
+}
+
+/** HTML 跳脫，避免資料內容被當成標記解析 */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/** 小提示：顯示數秒後自動消失 */
+let toastTimer = null;
+function showToast(msg, ms = 3500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+/* =====================================================================
+   §3 資料串接（第 2 階段實作：LASS、Open-Meteo、Mock 與自動降級）
+   ===================================================================== */
+
+/* =====================================================================
+   §4 演算法（第 4 階段實作：IDW 估算、網格熱力圖）
+   ===================================================================== */
+
+/* =====================================================================
+   §5 判定（第 3 階段實作：三級門檻純函式）
+   ===================================================================== */
+
+/** 取得跑點目前燈號；判定尚未實作前一律回傳「資料不足」 */
+function getSpotStatus(spotId) {
+  const ev = state.evaluations[spotId];
+  return ev ? ev.status : 'unknown';
+}
+
+/* =====================================================================
+   §6 推薦（第 6 階段實作：換點推薦）
+   ===================================================================== */
+
+/* =====================================================================
+   §7 地圖
+   ===================================================================== */
+let map = null;
+let labelLayer = null;
+const spotMarkers = new Map(); // spotId → L.Marker
+let userMarker = null;
+
+/** 初始化地圖、底圖與標籤圖層 */
+function initMap() {
+  map = L.map('map', {
+    center: CONFIG.DEFAULT_CENTER,
+    zoom: CONFIG.DEFAULT_ZOOM,
+    zoomControl: false,
+    attributionControl: true,
+  });
+  // 右下角：先加「回到我的位置」再加縮放鈕（Leaflet 底部角落由下往上堆疊，定位鈕會在最下方、拇指最易點）
+  addLocateControl();
+  L.control.zoom({ position: 'bottomright', zoomInTitle: '放大', zoomOutTitle: '縮小' }).addTo(map);
+
+  // 主圖層：CARTO 淺色無標籤
+  L.tileLayer(CONFIG.TILE_BASE, {
+    subdomains: 'abcd', maxZoom: 19, attribution: CONFIG.ATTRIBUTION,
+  }).addTo(map);
+
+  // 純標籤圖層放在獨立 pane：高於熱力圖、低於跑點標記，且不攔截點擊
+  map.createPane('labels');
+  map.getPane('labels').style.zIndex = 450;
+  map.getPane('labels').style.pointerEvents = 'none';
+  labelLayer = L.tileLayer(CONFIG.TILE_LABELS, { subdomains: 'abcd', maxZoom: 19, pane: 'labels' });
+
+  map.on('zoomend', updateLabelLayer);
+  updateLabelLayer();
+}
+
+/** 縮放 ≥ 14 時顯示標籤圖層，否則移除 */
+function updateLabelLayer() {
+  const show = map.getZoom() >= CONFIG.LABEL_MIN_ZOOM;
+  if (show && !map.hasLayer(labelLayer)) labelLayer.addTo(map);
+  if (!show && map.hasLayer(labelLayer)) map.removeLayer(labelLayer);
+}
+
+/** 依狀態產生跑點標記圖示（狀態色圓形＋白色狀態圖示） */
+function spotIcon(status, selected) {
+  const meta = STATUS_META[status];
+  return L.divIcon({
+    className: `spot-marker ${meta.cls}${selected ? ' is-selected' : ''}`,
+    html: `<div class="pin">${iconSvg(meta.icon)}</div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+}
+
+/** 依 RUN_SPOTS 建立 / 更新所有跑點標記 */
+function renderMarkers() {
+  for (const spot of RUN_SPOTS) {
+    const status = getSpotStatus(spot.id);
+    const selected = state.selectedId === spot.id;
+    let marker = spotMarkers.get(spot.id);
+    if (!marker) {
+      marker = L.marker([spot.lat, spot.lng], {
+        title: spot.name, alt: spot.name, keyboard: true, riseOnHover: true,
+      }).addTo(map);
+      marker.on('click', () => selectSpot(spot.id));
+      marker.bindTooltip(spot.name, { direction: 'top', offset: [0, -18] });
+      spotMarkers.set(spot.id, marker);
+    }
+    marker.setIcon(spotIcon(status, selected));
+    marker.setZIndexOffset(selected ? 1000 : 0);
+    // 標記的無障礙名稱同時包含狀態文字
+    const el = marker.getElement();
+    if (el) el.setAttribute('aria-label', `${spot.name}，${STATUS_META[status].label}`);
+  }
+}
+
+/** 更新使用者位置標記（藍點＋脈動外圈） */
+function renderUserMarker() {
+  if (!state.userPos) return;
+  const latlng = [state.userPos.lat, state.userPos.lng];
+  if (!userMarker) {
+    userMarker = L.marker(latlng, {
+      icon: L.divIcon({ className: 'user-marker', html: '<span class="pulse"></span><span class="dot"></span>', iconSize: [16, 16] }),
+      keyboard: false, interactive: false, zIndexOffset: -100,
+    }).addTo(map);
+  } else {
+    userMarker.setLatLng(latlng);
+  }
+}
+
+/** 右下角「回到我的位置」按鈕 */
+function addLocateControl() {
+  const Locate = L.Control.extend({
+    options: { position: 'bottomright' },
+    onAdd() {
+      const btn = L.DomUtil.create('button', 'leaflet-control map-btn');
+      btn.type = 'button';
+      btn.title = '回到我的位置';
+      btn.setAttribute('aria-label', '回到我的位置');
+      btn.innerHTML = iconSvg('i-locate');
+      L.DomEvent.disableClickPropagation(btn);
+      L.DomEvent.on(btn, 'click', () => {
+        if (state.userPos) {
+          map.flyTo([state.userPos.lat, state.userPos.lng], Math.max(map.getZoom(), CONFIG.LOCATED_ZOOM));
+        } else {
+          locateUser({ recenter: true });
+        }
+      });
+      return btn;
+    },
+  });
+  new Locate().addTo(map);
+}
+
+/* =====================================================================
+   §8 UI：狀態管理與畫面渲染
+   ===================================================================== */
+const state = {
+  selectedId: null,     // 目前選取的跑點 id
+  userPos: null,        // { lat, lng, accuracy }；未取得定位時為 null
+  evaluations: {},      // spotId → 判定結果（第 3 階段起填入）
+};
+
+/** 依名稱排序（未取得定位時使用；判定完成後第 5 階段改為燈號＋距離排序） */
+function sortedSpots() {
+  const list = RUN_SPOTS.slice();
+  if (state.userPos) {
+    const { lat, lng } = state.userPos;
+    list.sort((a, b) => haversine(lat, lng, a.lat, a.lng) - haversine(lat, lng, b.lat, b.lng));
+  } else {
+    list.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+  }
+  return list;
+}
+
+/** 渲染側邊欄跑點列表 */
+function renderList() {
+  const ul = document.getElementById('spotList');
+  ul.innerHTML = sortedSpots().map((spot) => {
+    const status = getSpotStatus(spot.id);
+    const meta = STATUS_META[status];
+    const dist = state.userPos
+      ? `<span class="dist num">${formatKm(haversine(state.userPos.lat, state.userPos.lng, spot.lat, spot.lng))}</span>`
+      : '';
+    return `<li><button type="button" class="spot-item" data-id="${spot.id}"
+                aria-current="${state.selectedId === spot.id}">
+      <span class="status-dot ${meta.cls}" title="${meta.label}">${iconSvg(meta.icon)}</span>
+      <span class="meta">
+        <span class="name">${escapeHtml(spot.name)}</span>
+        <span class="sub">${escapeHtml(spot.district)}・${SPOT_TYPE_LABEL[spot.type] || ''}・<span style="color:var(--st-text)" class="${meta.cls}">${meta.label}</span></span>
+      </span>${dist}</button></li>`;
+  }).join('');
+}
+
+/** 全部重新渲染 */
+function render() {
+  renderMarkers();
+  renderList();
+  renderUserMarker();
+}
+
+/** 選取跑點：地圖平移並更新畫面 */
+function selectSpot(id, { pan = true } = {}) {
+  const spot = RUN_SPOTS.find((s) => s.id === id);
+  if (!spot) return;
+  state.selectedId = id;
+  if (pan) map.flyTo([spot.lat, spot.lng], Math.max(map.getZoom(), CONFIG.SPOT_ZOOM), { duration: 0.6 });
+  render();
+}
+
+/** 綁定 UI 事件 */
+function bindUI() {
+  // 列表點擊（事件委派）
+  document.getElementById('spotList').addEventListener('click', (e) => {
+    const btn = e.target.closest('.spot-item');
+    if (btn) selectSpot(Number(btn.dataset.id));
+  });
+  // 版面在 768px 斷點切換時，地圖容器尺寸改變，需通知 Leaflet 重算
+  const mq = window.matchMedia('(min-width: 768px)');
+  const onChange = () => map.invalidateSize();
+  if (mq.addEventListener) mq.addEventListener('change', onChange); else mq.addListener(onChange);
+}
+
+/* =====================================================================
+   §7-2 定位（Geolocation API）
+   ===================================================================== */
+
+/**
+ * 取得使用者位置。
+ * - 成功：標記藍點；若在台北市範圍內則移至該處，否則保留全市視野並提示。
+ * - 失敗 / 拒絕 / 不支援：維持台北車站為中心、縮放 12，並提示「未取得定位」。
+ */
+function locateUser({ recenter = true } = {}) {
+  if (!('geolocation' in navigator)) {
+    showToast('未取得定位：此瀏覽器不支援定位，以台北車站為中心顯示');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      state.userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+      render();
+      if (!recenter) return;
+      if (inBBox(state.userPos.lat, state.userPos.lng)) {
+        map.flyTo([state.userPos.lat, state.userPos.lng], CONFIG.LOCATED_ZOOM, { duration: 0.8 });
+      } else {
+        showToast('目前位置不在台北市範圍內，仍以全市跑點顯示');
+      }
+    },
+    (err) => {
+      const reason = err && err.code === 1 ? '定位權限被拒絕'
+                   : err && err.code === 3 ? '定位逾時'
+                   : '無法取得位置';
+      showToast(`未取得定位（${reason}），以台北車站為中心顯示`);
+    },
+    { enableHighAccuracy: true, timeout: CONFIG.GEO_TIMEOUT_MS, maximumAge: 60000 }
+  );
+}
+
+/* =====================================================================
+   §9 通知（第 7 階段實作：背景監測、冷卻、橫幅與 Web Notification）
+   ===================================================================== */
+
+/* =====================================================================
+   §10 啟動
+   ===================================================================== */
+function bootstrap() {
+  if (typeof L === 'undefined') {
+    // Leaflet CDN 載入失敗（例如完全離線）：顯示提示而非空白錯誤
+    document.getElementById('map').innerHTML =
+      '<p style="padding:96px 24px;color:var(--text-2);text-align:center">地圖元件載入失敗，請確認網路連線後重新整理。</p>';
+    return;
+  }
+  initMap();
+  bindUI();
+  render();
+  locateUser({ recenter: true });
+}
+
+// 對外提供除錯 / 測試介面（之後階段會加入 evaluate、runTests 等）
+window.SafeAir = { RUN_SPOTS, CONFIG, state, haversine, selectSpot };
+
+bootstrap();
+</script>
+</body>
+</html>
