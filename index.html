@@ -158,6 +158,38 @@ button { font: inherit; color: inherit; }
 .leaflet-touch .leaflet-bar a { width: 36px; height: 36px; line-height: 36px; }
 
 /* =====================================================================
+   §S5-2 側邊欄底部：資料狀態與資料模式切換
+   ===================================================================== */
+.sb-footer { border-top: 1px solid var(--line); padding: 12px 20px 16px; display: grid; gap: 10px; }
+.sb-status { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+             font-size: 13px; color: var(--text-2); }
+.field-label { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px;
+       background: var(--hover); border-radius: 10px; }
+.seg button { min-height: 36px; padding: 0 4px; border: 0; border-radius: 7px; background: transparent;
+              font-size: 13px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600;
+                                   box-shadow: 0 1px 3px rgba(15, 23, 42, .15); }
+
+/* 資料來源狀態標記：滑鼠移上或點擊時顯示原因 */
+.src-wrap { position: relative; }
+.src-badge { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 2px 10px;
+             border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+             font-size: 12px; cursor: pointer; white-space: nowrap; }
+.src-badge .icon { width: 14px; height: 14px; }
+.src-badge.is-live { color: var(--green-text); border-color: #A7F3D0; background: var(--green-bg); }
+.src-badge.is-offline { color: var(--gray-text); background: var(--gray-bg); }
+.src-badge.is-loading { color: var(--text-2); }
+.src-pop { display: none; position: absolute; z-index: 1200; right: 0; bottom: calc(100% + 8px); width: 280px;
+           padding: 10px 12px; border-radius: 10px; background: var(--text); color: #fff; font-size: 13px;
+           line-height: 1.6; box-shadow: var(--shadow); }
+.src-pop ul { margin: 0; padding-left: 18px; }
+.src-pop.below { bottom: auto; top: calc(100% + 8px); }
+.src-wrap.open .src-pop { display: block; }
+@media (hover: hover) { .src-wrap:hover .src-pop { display: block; } }
+#mobileTop .src-wrap { margin-left: auto; }
+
+/* =====================================================================
    §S6 小提示（Toast）
    ===================================================================== */
 #toast {
@@ -180,6 +212,7 @@ button { font: inherit; color: inherit; }
   <symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></symbol>
   <symbol id="i-help-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
   <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
   <symbol id="i-run" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="1.8"/><path d="M8 21l3-6 3 2v5"/><path d="M6 12l2-4 4-1 3 3 3 1"/><path d="M11 15l1-5"/></symbol>
 </svg>
 
@@ -193,6 +226,15 @@ button { font: inherit; color: inherit; }
       <h2 class="sb-section-title">跑點列表</h2>
       <ul id="spotList" class="spot-list"></ul>
     </div>
+    <!-- 側邊欄底部：資料更新時間、資料來源狀態、資料模式切換 -->
+    <div class="sb-footer">
+      <div class="sb-status">
+        <span>資料更新 <time id="updatedAt" class="num">—</time></span>
+        <div class="src-wrap" data-src="sidebar"></div>
+      </div>
+      <div class="field-label" id="modeLabel">資料模式</div>
+      <div class="seg" id="modeSeg" role="group" aria-labelledby="modeLabel"></div>
+    </div>
   </aside>
 
   <main id="mapWrap">
@@ -200,6 +242,7 @@ button { font: inherit; color: inherit; }
     <!-- 窄螢幕頂部懸浮列（第 5 階段改為搜尋欄） -->
     <div id="mobileTop">
       <div class="brand"><span class="brand-mark"><svg class="icon"><use href="#i-run"/></svg></span>SafeAir Run</div>
+      <div class="src-wrap" data-src="mobile"></div>
     </div>
     <div id="toast" role="status" aria-live="polite"></div>
   </main>
@@ -243,6 +286,15 @@ const CONFIG = {
   SPOT_ZOOM: 15,             // 選取跑點時的縮放等級
   LABEL_MIN_ZOOM: 14,        // 縮放 ≥ 14 疊加 CARTO 純標籤圖層
   GEO_TIMEOUT_MS: 10000,     // 定位逾時
+  REFRESH_MS: 10 * 60 * 1000, // 兩個資料來源皆每 10 分鐘自動更新
+  FETCH_TIMEOUT_MS: 8000,    // 請求逾時 8 秒視為失敗
+  STATION_MAX_AGE_MIN: 60,   // 測站更新時間距今超過 60 分鐘即排除
+  PM25_MIN: 0,               // PM2.5 有效範圍下限（< 0 排除）
+  PM25_MAX: 500,             // PM2.5 有效範圍上限（> 500 排除）
+  MIN_VALID_STATIONS: 2,     // 台北範圍內有效測站 < 2 時改用 Mock
+  IDW: { power: 2, snapM: 50, radiiM: [3000, 5000] }, // IDW：p=2、<50m 直接採用、3km → 5km
+  TAIPEI_UTC_OFFSET_H: 8,    // 台灣無日光節約時間，固定 UTC+8
+  OPEN_METEO_URL: 'https://api.open-meteo.com/v1/forecast',
   // CARTO 底圖金鑰（CARTO 已改為需要免費 API 金鑰，否則回傳「API KEY REQUIRED」浮水印圖磚）。
   // 此金鑰會隨前端程式公開；部署後請至 CARTO 後台將金鑰限制在部署網域（Referer），見 README。
   CARTO_API_KEY: 'cb1_5e1f_1_c7302948d999cce1d9d6c96b',
@@ -250,6 +302,29 @@ const CONFIG = {
   TILE_LABELS: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_only_labels/{z}/{x}/{y}{r}.png?key={key}',
   ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者 &copy; <a href="https://carto.com/attributions">CARTO</a>',
 };
+
+/* ---------------------------------------------------------------------
+   PM2.5 資料來源（可抽換介面）
+   - 依陣列順序嘗試 enabled 的來源，第一個取得 ≥ 2 個台北有效測站者採用。
+   - 每個來源提供 adapter(json) → 標準測站陣列 [{ id, name, lat, lng, pm25, time(Date) }]，
+     清洗（範圍框、數值範圍、時效）由共用的 cleanStations() 處理。
+   - adapter 為函式宣告（會被提升），可在此直接引用。
+   --------------------------------------------------------------------- */
+const PM25_SOURCES = [
+  { id: 'lass', name: 'LASS 空氣盒子', enabled: true,
+    url: 'https://pm25.lass-net.org/data/last-all-airbox.json', adapter: lassAdapter },
+  // 民生公共物聯網 SensorThings API：2026-11-21 起 SSL 憑證過期，尚未實測 CORS，暫不啟用
+  { id: 'sta', name: '民生公共物聯網（STA）', enabled: false,
+    url: 'https://sta.ci.taiwan.gov.tw/STA_AirQuality_EPAIoT/v1.0', adapter: staAdapter },
+];
+
+// 資料模式：即時資料（失敗自動降級為「正常」Mock）與三種 Demo 情境
+const DATA_MODES = [
+  { id: 'live',      label: '即時資料' },
+  { id: 'normal',    label: '正常' },
+  { id: 'pollution', label: '高空汙' },
+  { id: 'storm',     label: '大雨曝曬' },
+];
 
 // 跑點類型的中文顯示
 const SPOT_TYPE_LABEL = { riverside: '河濱', park: '公園' };
@@ -260,6 +335,85 @@ const STATUS_META = {
   yellow:  { cls: 'st-yellow',  icon: 'i-alert-triangle', label: '建議留意' },
   red:     { cls: 'st-red',     icon: 'i-x-circle',       label: '不建議前往' },
   unknown: { cls: 'st-unknown', icon: 'i-help-circle',    label: '資料不足' },
+};
+
+/* =====================================================================
+   §1-2 資料：Mock 測站與情境（離線 / 展示模式使用）
+   ---------------------------------------------------------------------
+   - MOCK_STATIONS：分布於台北 12 區的 24 個模擬測站，pm 為「正常」情境的 PM2.5，
+     西側（萬華、中正）略高，讓熱力圖有空間變化。
+   - MOCK_SCENARIOS：
+     stationPm(st)：該情境下背景測站的 PM2.5。
+     weather：所有跑點共用的氣象基準值。
+     spots：指定跑點的覆寫值（以 id 指定，此處為唯一允許寫死跑點的地方）。
+       若覆寫含 pm25，會在該跑點旁 ~11 公尺放一個錨點測站，
+       IDW「< 50 公尺直接採用」規則會讓跑點取得此值，熱力圖也與資訊卡一致。
+     跑點若不在 RUN_SPOTS 中，其覆寫會被自動忽略。
+   ===================================================================== */
+const MOCK_STATIONS = [
+  { id: 'm01', name: '北投',   lat: 25.132, lng: 121.501, pm: 9 },
+  { id: 'm02', name: '天母',   lat: 25.117, lng: 121.531, pm: 7 },
+  { id: 'm03', name: '士林',   lat: 25.093, lng: 121.526, pm: 10 },
+  { id: 'm04', name: '社子',   lat: 25.087, lng: 121.505, pm: 14 },
+  { id: 'm05', name: '關渡',   lat: 25.120, lng: 121.466, pm: 11 },
+  { id: 'm06', name: '圓山',   lat: 25.072, lng: 121.520, pm: 12 },
+  { id: 'm07', name: '大同',   lat: 25.063, lng: 121.513, pm: 16 },
+  { id: 'm08', name: '中山',   lat: 25.064, lng: 121.526, pm: 13 },
+  { id: 'm09', name: '松山機場', lat: 25.067, lng: 121.552, pm: 11 },
+  { id: 'm10', name: '內湖',   lat: 25.083, lng: 121.589, pm: 8 },
+  { id: 'm11', name: '東湖',   lat: 25.068, lng: 121.612, pm: 6 },
+  { id: 'm12', name: '南港',   lat: 25.054, lng: 121.607, pm: 7 },
+  { id: 'm13', name: '松山',   lat: 25.050, lng: 121.578, pm: 9 },
+  { id: 'm14', name: '信義',   lat: 25.033, lng: 121.565, pm: 10 },
+  { id: 'm15', name: '象山',   lat: 25.027, lng: 121.576, pm: 7 },
+  { id: 'm16', name: '大安',   lat: 25.026, lng: 121.543, pm: 11 },
+  { id: 'm17', name: '公館',   lat: 25.014, lng: 121.534, pm: 13 },
+  { id: 'm18', name: '中正',   lat: 25.032, lng: 121.519, pm: 17 },
+  { id: 'm19', name: '萬華',   lat: 25.035, lng: 121.500, pm: 27 },
+  { id: 'm20', name: '南機場', lat: 25.023, lng: 121.507, pm: 33 },
+  { id: 'm21', name: '景美',   lat: 24.993, lng: 121.541, pm: 9 },
+  { id: 'm22', name: '木柵',   lat: 24.987, lng: 121.555, pm: 8 },
+  { id: 'm23', name: '文山',   lat: 24.998, lng: 121.581, pm: 6 },
+  { id: 'm24', name: '陽明山', lat: 25.155, lng: 121.545, pm: 5 },
+];
+
+const MOCK_SCENARIOS = {
+  // 正常：混合三種燈號 → 青年公園 🔴（PM2.5 偏高）、大佳河濱公園 🟡（河岸無遮蔭、紫外線偏強）、其餘 🟢
+  normal: {
+    label: '正常',
+    stationPm: (st) => st.pm,
+    weather: { rain: 10, uvi: 3.0, feels: 24.0 },
+    spots: {
+      1: { pm25: 9.0 },              // 大安森林公園
+      2: { pm25: 11.0, uvi: 6.5 },   // 大佳河濱公園 → 🟡
+      3: { pm25: 12.0 },             // 國立中正紀念堂
+      4: { pm25: 10.0 },             // 花博公園新生園區
+      5: { pm25: 38.0 },             // 青年公園 → 🔴
+    },
+  },
+  // 高空汙：大佳河濱公園 PM2.5 落在黃燈，其餘四點 ≥ 35.5
+  pollution: {
+    label: '高空汙',
+    stationPm: (st) => Math.round((st.pm * 1.5 + 32) * 10) / 10,
+    weather: { rain: 5, uvi: 4.0, feels: 22.0 },
+    spots: {
+      1: { pm25: 46.0 },
+      2: { pm25: 28.0 },             // 大佳河濱公園 → 🟡
+      3: { pm25: 52.0 },
+      4: { pm25: 41.0 },
+      5: { pm25: 58.0 },
+    },
+  },
+  // 大雨曝曬：大佳河濱公園與花博新生園區降雨機率 > 60%，其餘三點 UVI ≥ 8（基準值 9）
+  storm: {
+    label: '大雨曝曬',
+    stationPm: (st) => Math.round(st.pm * 0.6 * 10) / 10, // 雨水洗刷，空品較佳
+    weather: { rain: 20, uvi: 9.0, feels: 29.0 },
+    spots: {
+      2: { rain: 80, uvi: 2.0 },     // 大佳河濱公園
+      4: { rain: 75, uvi: 2.0 },     // 花博公園新生園區
+    },
+  },
 };
 
 /* =====================================================================
@@ -297,6 +451,35 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/** 轉為有限數值，否則回傳 null（防呆：字串 'N/A'、null、NaN 皆視為缺值） */
+function toNum(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** 四捨五入至指定小數位 */
+function round(v, digits = 1) {
+  const k = 10 ** digits;
+  return Math.round(v * k) / k;
+}
+
+/** 以台北時間格式化日期（不受裝置時區影響） */
+function formatTaipei(date, { withDate = false } = {}) {
+  const opts = { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hour12: false };
+  if (withDate) Object.assign(opts, { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return new Intl.DateTimeFormat('zh-TW', opts).format(date);
+}
+
+/**
+ * 取得台北時間「當下整點」的鍵值，格式與 Open-Meteo（timezone=Asia/Taipei）的 hourly.time 相同：
+ * 例如 "2026-11-22T18:00"。以 UTC+8 換算，不依賴裝置時區。
+ */
+function currentTaipeiHourKey(now = new Date()) {
+  const t = new Date(now.getTime() + CONFIG.TAIPEI_UTC_OFFSET_H * 3600e3);
+  return t.toISOString().slice(0, 13) + ':00';
+}
+
 /** 小提示：顯示數秒後自動消失 */
 let toastTimer = null;
 function showToast(msg, ms = 3500) {
@@ -308,12 +491,318 @@ function showToast(msg, ms = 3500) {
 }
 
 /* =====================================================================
-   §3 資料串接（第 2 階段實作：LASS、Open-Meteo、Mock 與自動降級）
+   §3 資料串接：PM2.5（可抽換來源）、Open-Meteo 氣象、Mock 與自動降級
    ===================================================================== */
 
+/** 資料取得失敗的錯誤（code 用於產生白話原因） */
+class DataError extends Error {
+  constructor(code, detail = '') { super(detail || code); this.code = code; this.detail = detail; }
+}
+
+/** 將失敗原因轉成介面上的白話說明 */
+function describeFailure(sourceName, err) {
+  switch (err && err.code) {
+    case 'timeout': return `${sourceName}回應逾時（超過 ${CONFIG.FETCH_TIMEOUT_MS / 1000} 秒）`;
+    case 'network': return `無法連線至${sourceName}（跨網域限制或網路離線）`;
+    case 'http':    return `${sourceName}回應錯誤（${err.detail}）`;
+    case 'parse':   return `${sourceName}資料格式無法解析`;
+    case 'stale':   return `即時資料來源暫停更新（${sourceName}最新資料為 ${err.detail}）`;
+    case 'few':     return `${sourceName}在台北市範圍內的有效測站不足 ${CONFIG.MIN_VALID_STATIONS} 站`;
+    case 'none':    return '沒有啟用中的 PM2.5 資料來源';
+    default:        return `${sourceName}發生未預期錯誤`;
+  }
+}
+
+/** fetch 加上逾時（AbortController），並把各種失敗統一轉成 DataError */
+async function fetchJson(url, ms = CONFIG.FETCH_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    if (!res.ok) throw new DataError('http', `HTTP ${res.status}`);
+    try { return await res.json(); } catch (e) { throw new DataError('parse'); }
+  } catch (e) {
+    if (e instanceof DataError) throw e;
+    if (e && e.name === 'AbortError') throw new DataError('timeout');
+    throw new DataError('network', e && e.message); // CORS 被擋、離線、DNS 失敗皆為 TypeError
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   PM2.5 adapter：LASS 空氣盒子 last-all-airbox.json
+   ---------------------------------------------------------------------
+   【2026-11-22 實測摘要】（tools/pm25_summary.py）
+   - 結構：{ source, num_of_records, version, descriptions, feeds: [...] }，全台 462 站。
+   - PM2.5：feeds[].s_d0（float，μg/m³，原始感測值）。另有 c_d0 為校正值，但台北測站多為字串 'N/A'，故不採用。
+   - 經緯度：feeds[].gps_lat / gps_lon（float）；範圍含台灣以外（lat 14～25、lon 100～121），需以範圍框篩選。
+   - 時間：feeds[].timestamp，ISO 8601「UTC」（結尾 Z），例："2026-09-01T16:08:23Z"；
+           另有 date（"2026-09-01"）＋ time（"16:07:38"）亦為 UTC，作為備援。
+   - 識別：device_id；名稱：SiteName（備援 name）。
+   - 實測時資料停在 2026-09-01（Last-Modified 同日），且回應無 Access-Control-Allow-Origin，
+     瀏覽器無法讀取 → 會自動降級為 Mock。台北範圍框內 92 站中有 64 站 s_d0 = 0（疑似感測異常，
+     但規格僅排除 < 0 與 > 500，故保留）。
+   - 防呆：欄位缺漏 / 非數值 → 該站略過；timestamp 無法解析時改用 date＋time；同 device_id 只取最新一筆。
+   --------------------------------------------------------------------- */
+function lassAdapter(json) {
+  if (!json || !Array.isArray(json.feeds)) throw new DataError('parse');
+  const byId = new Map();
+  for (const f of json.feeds) {
+    if (!f || typeof f !== 'object') continue;
+    const lat = toNum(f.gps_lat), lng = toNum(f.gps_lon), pm25 = toNum(f.s_d0);
+    if (lat === null || lng === null || pm25 === null) continue;
+    let time = typeof f.timestamp === 'string' ? new Date(f.timestamp) : null;
+    if (!time || isNaN(time)) {
+      time = (f.date && f.time) ? new Date(`${f.date}T${f.time}Z`) : null; // date＋time 為 UTC
+    }
+    if (!time || isNaN(time)) continue;
+    const id = String(f.device_id || `${lat},${lng}`);
+    const prev = byId.get(id);
+    if (prev && prev.time >= time) continue;
+    byId.set(id, { id, name: String(f.SiteName || f.name || id), lat, lng, pm25, time });
+  }
+  return [...byId.values()];
+}
+
+/* ---------------------------------------------------------------------
+   PM2.5 adapter：民生公共物聯網 SensorThings API（STA）— 預留，尚未實作
+   ---------------------------------------------------------------------
+   - 狀態（2026-11-22）：sta.ci.taiwan.gov.tw 與 sta.colife.org.tw 的 SSL 憑證已於 2026-11-21 過期，
+     瀏覽器會拒絕連線；因此尚未實測 CORS、回應欄位與時區。待憑證恢復後重新測試再實作。
+   - 預期做法（OGC SensorThings API v1.0）：以 $filter=st_within(Thing/Locations/location, geography'POLYGON(...)')
+     或 geo.intersects 依台北範圍框查詢 PM2.5 Datastreams，並 $expand 最新一筆 Observations
+     （$orderby=phenomenonTime desc;$top=1），在 adapter 內轉成標準測站格式。
+   - 啟用方式：完成實作與實測後，將 PM25_SOURCES 中 sta 的 enabled 設為 true（可調整順序作為主來源）。
+   --------------------------------------------------------------------- */
+function staAdapter(json) { // eslint-disable-line no-unused-vars
+  throw new DataError('parse', 'STA adapter 尚未實作');
+}
+
+/**
+ * 共用清洗：台北範圍框 → PM2.5 有效範圍（0～500）→ 時效（≤ 60 分鐘）。
+ * 回傳 { valid, stats }，stats 供判斷失敗原因（例如全部過期 → 來源暫停更新）。
+ */
+function cleanStations(stations, now = new Date()) {
+  const stats = { total: stations.length, inBBox: 0, badValue: 0, stale: 0, latest: null };
+  const maxAgeMs = CONFIG.STATION_MAX_AGE_MIN * 60e3;
+  const valid = [];
+  for (const st of stations) {
+    if (!inBBox(st.lat, st.lng)) continue;
+    stats.inBBox++;
+    if (!stats.latest || st.time > stats.latest) stats.latest = st.time;
+    if (st.pm25 < CONFIG.PM25_MIN || st.pm25 > CONFIG.PM25_MAX) { stats.badValue++; continue; }
+    if (now - st.time > maxAgeMs) { stats.stale++; continue; }
+    valid.push(st);
+  }
+  return { valid, stats };
+}
+
+/** 依序嘗試啟用中的 PM2.5 來源；全部失敗時拋出含白話原因的 DataError */
+async function loadPm25Live() {
+  const reasons = [];
+  for (const src of PM25_SOURCES.filter((s) => s.enabled)) {
+    try {
+      const json = await fetchJson(src.url);
+      const { valid, stats } = cleanStations(src.adapter(json));
+      if (valid.length >= CONFIG.MIN_VALID_STATIONS) {
+        return { mode: 'live', sourceName: src.name, stations: valid, stats };
+      }
+      // 範圍內有測站但全部過期 → 視為來源暫停更新
+      const err = (stats.inBBox > 0 && stats.stale + stats.badValue === stats.inBBox && stats.stale > 0)
+        ? new DataError('stale', formatTaipei(stats.latest, { withDate: true }))
+        : new DataError('few');
+      reasons.push(describeFailure(src.name, err));
+    } catch (e) {
+      reasons.push(describeFailure(src.name, e));
+    }
+  }
+  const err = new DataError('none');
+  err.reasons = reasons.length ? reasons : [describeFailure('', err)];
+  throw err;
+}
+
+/**
+ * Open-Meteo：所有跑點（＋使用者位置）座標以逗號串接，一次請求取回。
+ * points: [{ key, lat, lng }] → 回傳 { key: { rain, uvi, feels } }，缺值為 null。
+ * 取「台北時間當下整點」那一筆作為現況值。
+ */
+async function loadWeatherLive(points) {
+  const params = new URLSearchParams({
+    latitude: points.map((p) => p.lat.toFixed(4)).join(','),
+    longitude: points.map((p) => p.lng.toFixed(4)).join(','),
+    hourly: 'apparent_temperature,precipitation_probability,uv_index',
+    timezone: 'Asia/Taipei',
+    forecast_days: '1',
+  });
+  const json = await fetchJson(`${CONFIG.OPEN_METEO_URL}?${params}`);
+  const list = Array.isArray(json) ? json : [json]; // 單一座標時回傳物件，多座標時回傳陣列
+  if (list.length !== points.length) throw new DataError('parse');
+  const hourKey = currentTaipeiHourKey();
+  const byKey = {};
+  points.forEach((p, i) => {
+    const h = list[i] && list[i].hourly;
+    const idx = h && Array.isArray(h.time) ? h.time.indexOf(hourKey) : -1;
+    const pick = (arr) => (idx >= 0 && Array.isArray(arr) ? toNum(arr[idx]) : null);
+    byKey[p.key] = {
+      rain: pick(h && h.precipitation_probability),
+      uvi: pick(h && h.uv_index),
+      feels: pick(h && h.apparent_temperature),
+    };
+  });
+  return { mode: 'live', sourceName: 'Open-Meteo', byKey, hourKey };
+}
+
+/** 產生 Mock 測站：背景測站＋跑點錨點測站（時間戳記為最近 15 分鐘內） */
+function buildMockStations(scenarioId, now = new Date()) {
+  const sc = MOCK_SCENARIOS[scenarioId];
+  const stations = MOCK_STATIONS.map((st, i) => ({
+    id: st.id, name: `${st.name}（模擬）`, lat: st.lat, lng: st.lng,
+    pm25: sc.stationPm(st), time: new Date(now - ((i * 7) % 15) * 60e3),
+  }));
+  for (const spot of RUN_SPOTS) {
+    const ov = sc.spots[spot.id];
+    if (ov && ov.pm25 !== undefined) {
+      stations.push({ id: `anchor-${spot.id}`, name: `${spot.name}旁（模擬）`,
+                      lat: spot.lat + 0.0001, lng: spot.lng, pm25: ov.pm25, time: new Date(now) });
+    }
+  }
+  return stations;
+}
+
+/** 產生 Mock 氣象：跑點＝情境基準值＋覆寫；其他座標（如使用者位置）採最近跑點的值 */
+function buildMockWeather(scenarioId, points) {
+  const sc = MOCK_SCENARIOS[scenarioId];
+  const spotWx = (spot) => {
+    const ov = sc.spots[spot.id] || {};
+    return {
+      rain: ov.rain !== undefined ? ov.rain : sc.weather.rain,
+      uvi: ov.uvi !== undefined ? ov.uvi : sc.weather.uvi,
+      feels: ov.feels !== undefined ? ov.feels : sc.weather.feels,
+    };
+  };
+  const byKey = {};
+  for (const p of points) {
+    const spot = p.spotId !== undefined ? RUN_SPOTS.find((s) => s.id === p.spotId) : nearestSpot(p.lat, p.lng);
+    byKey[p.key] = spotWx(spot);
+  }
+  return byKey;
+}
+
+/** 找出離指定座標最近的跑點 */
+function nearestSpot(lat, lng) {
+  let best = null, bestD = Infinity;
+  for (const s of RUN_SPOTS) {
+    const d = haversine(lat, lng, s.lat, s.lng);
+    if (d < bestD) { best = s; bestD = d; }
+  }
+  return best;
+}
+
+/** 氣象查詢點：所有跑點＋（若已定位）使用者位置 */
+function weatherPoints() {
+  const pts = RUN_SPOTS.map((s) => ({ key: `spot-${s.id}`, spotId: s.id, lat: s.lat, lng: s.lng }));
+  if (state.userPos) pts.push({ key: 'user', lat: state.userPos.lat, lng: state.userPos.lng });
+  return pts;
+}
+
+/**
+ * 載入資料（依資料模式）並計算各跑點 / 使用者位置的四項指標。
+ * - 即時資料：PM2.5 與氣象「各自」嘗試即時來源，失敗者個別降級為「正常」Mock。
+ * - 情境模式：兩者皆使用對應 Mock。
+ */
+let refreshSeq = 0;
+async function refreshData() {
+  const seq = ++refreshSeq;
+  const mode = state.dataMode;
+  const points = weatherPoints();
+  let pm, wx;
+
+  if (mode === 'live') {
+    const [pmRes, wxRes] = await Promise.allSettled([loadPm25Live(), loadWeatherLive(points)]);
+    pm = pmRes.status === 'fulfilled' ? pmRes.value
+       : { mode: 'mock', sourceName: 'Mock', stations: buildMockStations('normal'), reasons: pmRes.reason.reasons || [describeFailure('PM2.5 資料來源', pmRes.reason)] };
+    wx = wxRes.status === 'fulfilled' ? wxRes.value
+       : { mode: 'mock', sourceName: 'Mock', byKey: buildMockWeather('normal', points), reasons: [describeFailure('Open-Meteo 氣象資料', wxRes.reason)] };
+  } else {
+    const reason = `目前為情境測試「${MOCK_SCENARIOS[mode].label}」，顯示模擬數據`;
+    pm = { mode: 'mock', sourceName: 'Mock', stations: buildMockStations(mode), reasons: [reason] };
+    wx = { mode: 'mock', sourceName: 'Mock', byKey: buildMockWeather(mode, points), reasons: [] };
+  }
+  if (seq !== refreshSeq) return; // 已有較新的請求（例如快速切換模式），捨棄舊結果
+
+  state.data = { mode, pm, wx, updatedAt: new Date() };
+  computeReadings();
+  render();
+}
+
+/** 由測站與氣象計算每個跑點（及使用者位置）的四項指標 */
+function computeReadings() {
+  const { pm, wx } = state.data;
+  const readingAt = (lat, lng, key) => {
+    const w = wx.byKey[key] || {};
+    const est = idwEstimate(lat, lng, pm.stations);
+    return { pm25: est ? est.value : null, pmEstimate: est,
+             rain: toNum(w.rain), uvi: toNum(w.uvi), feels: toNum(w.feels) };
+  };
+  state.readings = {};
+  for (const s of RUN_SPOTS) state.readings[s.id] = readingAt(s.lat, s.lng, `spot-${s.id}`);
+  state.userReading = state.userPos ? readingAt(state.userPos.lat, state.userPos.lng, 'user') : null;
+}
+
+/** 資料來源狀態（供介面標記與原因說明） */
+function getSourceStatus() {
+  const d = state.data;
+  if (!d) return { kind: 'loading', label: '載入中…', reasons: ['正在取得資料'] };
+  if (d.mode !== 'live') return { kind: 'offline', label: '離線 / 展示模式', reasons: d.pm.reasons };
+  const reasons = [];
+  reasons.push(d.pm.mode === 'live'
+    ? `PM2.5：即時資料（${d.pm.sourceName}，${d.pm.stations.length} 站）`
+    : `PM2.5：${d.pm.reasons.join('；')}，目前為展示數據`);
+  reasons.push(d.wx.mode === 'live'
+    ? `氣象：即時資料（Open-Meteo，${d.wx.hourKey.slice(11)} 整點預報）`
+    : `氣象：${d.wx.reasons.join('；')}，目前為展示數據`);
+  const liveCount = (d.pm.mode === 'live') + (d.wx.mode === 'live');
+  if (liveCount === 2) return { kind: 'live', label: '即時資料', reasons };
+  return { kind: 'offline', label: liveCount === 0 ? '離線 / 展示模式' : '部分離線 / 展示模式', reasons };
+}
+
 /* =====================================================================
-   §4 演算法（第 4 階段實作：IDW 估算、網格熱力圖）
+   §4 演算法：IDW 反距離加權（網格熱力圖於第 4 階段加入）
    ===================================================================== */
+
+/**
+ * IDW 估算指定座標的 PM2.5。
+ * - 與某測站距離 < snapM（50 m）：直接採用該測站數值。
+ * - 依序在 radiiM（3 km → 5 km）內找測站，權重 w = 1 / d^p（p = 2）做加權平均。
+ * - 都沒有測站：若 cityAvg 為 true，採用台北市全部有效測站平均；否則回傳 null（熱力圖留白用）。
+ * 回傳 { value, method: 'snap' | 'idw' | 'cityAvg', radiusM, n } 或 null。
+ */
+function idwEstimate(lat, lng, stations, {
+  power = CONFIG.IDW.power, snapM = CONFIG.IDW.snapM, radiiM = CONFIG.IDW.radiiM, cityAvg = true,
+} = {}) {
+  if (!stations || stations.length === 0) return null;
+  const withD = stations.map((st) => ({ st, d: haversine(lat, lng, st.lat, st.lng) }));
+  let nearest = withD[0];
+  for (const x of withD) if (x.d < nearest.d) nearest = x;
+  if (nearest.d < snapM) return { value: round(nearest.st.pm25), method: 'snap', radiusM: 0, n: 1 };
+
+  for (const r of radiiM) {
+    let sw = 0, swv = 0, n = 0;
+    for (const { st, d } of withD) {
+      if (d > r) continue;
+      const w = 1 / d ** power;
+      sw += w; swv += w * st.pm25; n++;
+    }
+    if (n > 0) return { value: round(swv / sw), method: 'idw', radiusM: r, n };
+  }
+  if (!cityAvg) return null;
+  // TODO（第 4 階段）：改為只採台北市外框多邊形內的測站
+  const inCity = stations.filter((st) => inBBox(st.lat, st.lng));
+  if (inCity.length === 0) return null;
+  const avg = inCity.reduce((a, st) => a + st.pm25, 0) / inCity.length;
+  return { value: round(avg), method: 'cityAvg', radiusM: null, n: inCity.length };
+}
 
 /* =====================================================================
    §5 判定（第 3 階段實作：三級門檻純函式）
@@ -397,11 +886,24 @@ function renderMarkers() {
       spotMarkers.set(spot.id, marker);
     }
     marker.setIcon(spotIcon(status, selected));
+    marker.setTooltipContent(spotTooltipHtml(spot));
     marker.setZIndexOffset(selected ? 1000 : 0);
     // 標記的無障礙名稱同時包含狀態文字
     const el = marker.getElement();
     if (el) el.setAttribute('aria-label', `${spot.name}，${STATUS_META[status].label}`);
   }
+}
+
+/** 標記提示：名稱＋四項數值（資訊卡於第 5 階段加入） */
+function spotTooltipHtml(spot) {
+  const r = state.readings[spot.id];
+  if (!r) return escapeHtml(spot.name);
+  return `<strong>${escapeHtml(spot.name)}</strong><br><span class="num">PM2.5 ${fmtVal(r.pm25, 1)}・降雨 ${fmtVal(r.rain, 0, '%')}・UVI ${fmtVal(r.uvi, 1)}・體感 ${fmtVal(r.feels, 1, '°C')}</span>`;
+}
+
+/** 數值顯示：缺值顯示「—」 */
+function fmtVal(v, digits = 1, unit = '') {
+  return v === null || v === undefined ? '—' : v.toFixed(digits) + unit;
 }
 
 /** 更新使用者位置標記（藍點＋脈動外圈） */
@@ -449,6 +951,10 @@ const state = {
   selectedId: null,     // 目前選取的跑點 id
   userPos: null,        // { lat, lng, accuracy }；未取得定位時為 null
   evaluations: {},      // spotId → 判定結果（第 3 階段起填入）
+  dataMode: 'live',     // 'live' | 'normal' | 'pollution' | 'storm'
+  data: null,           // { mode, pm, wx, updatedAt }：最近一次載入的原始資料
+  readings: {},         // spotId → { pm25, pmEstimate, rain, uvi, feels }
+  userReading: null,    // 使用者目前位置的四項指標
 };
 
 /** 依名稱排序（未取得定位時使用；判定完成後第 5 階段改為燈號＋距離排序） */
@@ -482,11 +988,43 @@ function renderList() {
   }).join('');
 }
 
+/** 資料來源標記（側邊欄底部與窄螢幕頂部各一個）與更新時間 */
+function renderSourceStatus() {
+  const st = getSourceStatus();
+  const cls = st.kind === 'live' ? 'is-live' : st.kind === 'loading' ? 'is-loading' : 'is-offline';
+  const icon = st.kind === 'live' ? 'i-check-circle' : 'i-info';
+  document.querySelectorAll('[data-src]').forEach((wrap) => {
+    const popId = `srcPop-${wrap.dataset.src}`;
+    const open = wrap.classList.contains('open');
+    wrap.innerHTML = `<button type="button" class="src-badge ${cls}" aria-expanded="${open}" aria-describedby="${popId}"
+        aria-label="資料來源：${st.label}（點擊查看原因）">${iconSvg(icon)}${st.label}</button>
+      <div class="src-pop${wrap.dataset.src === 'mobile' ? ' below' : ''}" id="${popId}" role="tooltip">
+        <ul>${st.reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul></div>`;
+  });
+  const t = document.getElementById('updatedAt');
+  if (state.data) { t.textContent = formatTaipei(state.data.updatedAt); t.dateTime = state.data.updatedAt.toISOString(); }
+}
+
+/** 資料模式切換按鈕 */
+function renderModeSwitch() {
+  document.getElementById('modeSeg').innerHTML = DATA_MODES.map((m) =>
+    `<button type="button" data-mode="${m.id}" aria-pressed="${state.dataMode === m.id}">${m.label}</button>`).join('');
+}
+
+/** 切換資料模式並重新載入 */
+function setDataMode(mode) {
+  if (!DATA_MODES.some((m) => m.id === mode) || mode === state.dataMode) return;
+  state.dataMode = mode;
+  renderModeSwitch();
+  refreshData();
+}
+
 /** 全部重新渲染 */
 function render() {
   renderMarkers();
   renderList();
   renderUserMarker();
+  renderSourceStatus();
 }
 
 /** 選取跑點：地圖平移並更新畫面 */
@@ -504,6 +1042,24 @@ function bindUI() {
   document.getElementById('spotList').addEventListener('click', (e) => {
     const btn = e.target.closest('.spot-item');
     if (btn) selectSpot(Number(btn.dataset.id));
+  });
+  // 資料模式切換
+  document.getElementById('modeSeg').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-mode]');
+    if (btn) setDataMode(btn.dataset.mode);
+  });
+  // 資料來源標記：點擊切換原因說明（觸控裝置無 hover）；點其他地方或按 Esc 關閉
+  document.addEventListener('click', (e) => {
+    const badge = e.target.closest('.src-badge');
+    document.querySelectorAll('.src-wrap').forEach((w) => {
+      const toggle = badge && w.contains(badge);
+      w.classList.toggle('open', toggle ? !w.classList.contains('open') : false);
+      const b = w.querySelector('.src-badge');
+      if (b) b.setAttribute('aria-expanded', w.classList.contains('open'));
+    });
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') document.querySelectorAll('.src-wrap.open').forEach((w) => w.classList.remove('open'));
   });
   // 版面在 768px 斷點切換時，地圖容器尺寸改變，需通知 Leaflet 重算
   const mq = window.matchMedia('(min-width: 768px)');
@@ -527,7 +1083,10 @@ function locateUser({ recenter = true } = {}) {
   }
   navigator.geolocation.getCurrentPosition(
     (pos) => {
+      const first = !state.userPos;
       state.userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+      // 首次取得定位：重新載入，讓氣象請求納入使用者座標；之後只重算 IDW
+      if (first) refreshData(); else if (state.data) computeReadings();
       render();
       if (!recenter) return;
       if (inBBox(state.userPos.lat, state.userPos.lng)) {
@@ -562,12 +1121,18 @@ function bootstrap() {
   }
   initMap();
   bindUI();
+  renderModeSwitch();
   render();
   locateUser({ recenter: true });
+  refreshData();
+  setInterval(refreshData, CONFIG.REFRESH_MS); // 每 10 分鐘自動更新
 }
 
 // 對外提供除錯 / 測試介面（之後階段會加入 evaluate、runTests 等）
-window.SafeAir = { RUN_SPOTS, CONFIG, state, haversine, selectSpot };
+window.SafeAir = {
+  RUN_SPOTS, CONFIG, PM25_SOURCES, state, haversine, selectSpot,
+  idwEstimate, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
+};
 
 bootstrap();
 </script>
