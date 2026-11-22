@@ -295,6 +295,19 @@ button { font: inherit; color: inherit; }
 .card-hint { color: var(--text-2); font-size: 14px; line-height: 1.6; }
 .card-hint .icon { vertical-align: -4px; margin-right: 4px; }
 
+/* 搜尋位置標記與「搜尋地點」列 */
+.search-marker { background: none; border: 0; filter: drop-shadow(0 3px 4px rgba(15, 23, 42, .4)); }
+.search-list li.s-geo { color: var(--focus); font-weight: 600; margin-top: 2px; border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; }
+.search-list li.s-geo .icon { width: 18px; height: 18px; }
+.search-list li.search-empty small { color: var(--text-2); }
+.search-list li.search-empty { display: block; padding: 10px; }
+
+/* 換點推薦 */
+.rec { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rec-title { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.rec .spot-list { padding: 0; margin: 0 -8px; }
+.rec-empty { margin: 4px 0 0; font-size: 14px; color: var(--text-2); }
+
 /* Bottom Sheet（窄螢幕）：收合 140px / 展開 80vh，可拖曳、點握把切換 */
 #sheet { display: none; }
 @media (max-width: 767.98px) {
@@ -313,7 +326,7 @@ button { font: inherit; color: inherit; }
   .sheet-body { flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }
   #sheet.expanded .sheet-body { overflow-y: auto; overscroll-behavior: contain; }
   #sheet .card { margin: 0 12px 8px; border: 0; padding: 4px 4px 8px; }
-  #sheet:not(.expanded) .metrics, #sheet:not(.expanded) .card-foot, #sheet:not(.expanded) .card-note { display: none; }
+  #sheet:not(.expanded) .metrics, #sheet:not(.expanded) .card-foot, #sheet:not(.expanded) .card-note, #sheet:not(.expanded) .rec { display: none; }
   #sheet:not(.expanded) .card-advice { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   #sheet:not(.expanded) .chip { margin-top: 6px; }
   .sheet-more { visibility: hidden; }
@@ -364,8 +377,8 @@ button { font: inherit; color: inherit; }
       <div class="search" data-search="sidebar">
         <label class="search-box">
           <svg class="icon"><use href="#i-search"/></svg>
-          <input type="search" placeholder="搜尋跑點或行政區" autocomplete="off" role="combobox"
-                 aria-label="搜尋跑點或行政區" aria-expanded="false" aria-autocomplete="list" aria-controls="searchList-sidebar">
+          <input type="search" placeholder="搜尋跑點、行政區或地點" autocomplete="off" role="combobox"
+                 aria-label="搜尋跑點、行政區或地點" aria-expanded="false" aria-autocomplete="list" aria-controls="searchList-sidebar">
         </label>
         <ul class="search-list" id="searchList-sidebar" role="listbox" hidden></ul>
       </div>
@@ -394,8 +407,8 @@ button { font: inherit; color: inherit; }
       <div class="search" data-search="mobile">
         <label class="search-box">
           <svg class="icon"><use href="#i-search"/></svg>
-          <input type="search" placeholder="搜尋跑點或行政區" autocomplete="off" role="combobox"
-                 aria-label="搜尋跑點或行政區" aria-expanded="false" aria-autocomplete="list" aria-controls="searchList-mobile">
+          <input type="search" placeholder="搜尋跑點、行政區或地點" autocomplete="off" role="combobox"
+                 aria-label="搜尋跑點、行政區或地點" aria-expanded="false" aria-autocomplete="list" aria-controls="searchList-mobile">
         </label>
         <ul class="search-list" id="searchList-mobile" role="listbox" hidden></ul>
       </div>
@@ -481,6 +494,10 @@ const CONFIG = {
   IDW: { power: 2, snapM: 50, radiiM: [3000, 5000] }, // IDW：p=2、<50m 直接採用；3 km 決定熱力圖是否留白、5 km 決定資訊卡是否標示「附近無測站」（皆不影響數值）
   HEAT: { cellM: 75, opacity: 0.35, hatchOpacity: 0.8 }, // 熱力圖：75 m 細格、色塊透明度 0.35、斜線透明度 0.8
   TAIPEI_UTC_OFFSET_H: 8,    // 台灣無日光節約時間，固定 UTC+8
+  // 地點搜尋（地理編碼）：OpenStreetMap Nominatim 公用服務。使用條款重點（2026-11 查證）：
+  // 每秒最多 1 次請求、須能辨識應用程式（瀏覽器會帶 Referer）、不得做自動完成、只能由使用者按下搜尋時觸發。
+  GEOCODER: { url: 'https://nominatim.openstreetmap.org/search', minIntervalMs: 1100, limit: 5 },
+  REC: { radiusM: 5000, max: 3 }, // 換點推薦：5 km 內、最多 3 筆
   OPEN_METEO_URL: 'https://api.open-meteo.com/v1/forecast',
   // CARTO 底圖金鑰（CARTO 已改為需要免費 API 金鑰，否則回傳「API KEY REQUIRED」浮水印圖磚）。
   // 此金鑰會隨前端程式公開；部署後請至 CARTO 後台將金鑰限制在部署網域（Referer），見 README。
@@ -711,11 +728,11 @@ function describeFailure(sourceName, err) {
  * 2. Open-Meteo：「429 (Too Many Requests)」— 同一對外 IP 請求過多時的限流（雲端 / 共用網路較常見）。
  * 三種 Mock 情境（正常 / 高空汙 / 大雨曝曬）不發出任何網路請求，Console 應為零錯誤、零警告。
  */
-async function fetchJson(url, ms = CONFIG.FETCH_TIMEOUT_MS) {
+async function fetchJson(url, ms = CONFIG.FETCH_TIMEOUT_MS, init = { cache: 'no-store' }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    const res = await fetch(url, { signal: ctrl.signal, ...init });
     if (!res.ok) throw new DataError('http', `HTTP ${res.status}`);
     try { return await res.json(); } catch (e) { throw new DataError('parse'); }
   } catch (e) {
@@ -900,6 +917,7 @@ function nearestSpot(lat, lng) {
 function weatherPoints() {
   const pts = RUN_SPOTS.map((s) => ({ key: `spot-${s.id}`, spotId: s.id, lat: s.lat, lng: s.lng }));
   if (state.userPos) pts.push({ key: 'user', lat: state.userPos.lat, lng: state.userPos.lng });
+  if (state.searchPlace && state.searchPlace.inTaipei) pts.push({ key: 'search', lat: state.searchPlace.lat, lng: state.searchPlace.lng });
   return pts;
 }
 
@@ -946,6 +964,8 @@ function computeReadings() {
   state.readings = {};
   for (const s of RUN_SPOTS) state.readings[s.id] = readingAt(s.lat, s.lng, `spot-${s.id}`);
   state.userReading = state.userPos ? readingAt(state.userPos.lat, state.userPos.lng, 'user') : null;
+  const sp = state.searchPlace;
+  state.searchReading = sp && sp.inTaipei && wx.byKey.search ? readingAt(sp.lat, sp.lng, 'search') : null;
   computeEvaluations();
 }
 
@@ -1160,6 +1180,7 @@ function computeEvaluations() {
     if (state.readings[s.id]) state.evaluations[s.id] = evaluate(state.readings[s.id]);
   }
   state.userEvaluation = state.userReading ? evaluate(state.userReading) : null;
+  state.searchEvaluation = state.searchReading ? evaluate(state.searchReading) : null;
 }
 
 /**
@@ -1264,7 +1285,7 @@ function getSpotStatus(spotId) {
 }
 
 /* =====================================================================
-   §6 推薦（第 6 階段實作：換點推薦）
+   §6 推薦：實作於 §8-2 之後的「§6 換點推薦」（recommendSpots、recommendHtml）
    ===================================================================== */
 
 /* =====================================================================
@@ -1410,6 +1431,10 @@ const state = {
   data: null,           // { mode, pm, wx, updatedAt }：最近一次載入的原始資料
   readings: {},         // spotId → { pm25, pmEstimate, rain, uvi, feels }
   userReading: null,    // 使用者目前位置的四項指標
+  searchPlace: null,    // 搜尋到的地點 { name, sub, lat, lng, inTaipei }
+  searchReading: null,  // 搜尋位置的四項指標（僅台北市內）
+  searchEvaluation: null,
+  cardFocus: null,      // 資訊卡目前對象：'spot' | 'search' | null（null＝目前位置）
   geoFailed: false,     // 定位失敗（供資訊卡提示「未取得定位」）
   sheetExpanded: false, // 窄螢幕 Bottom Sheet 是否展開
 };
@@ -1429,22 +1454,24 @@ function sortedSpots() {
 }
 
 /** 渲染側邊欄跑點列表 */
+/** 跑點列表項（列表與推薦共用）：第一行名稱；第二行「狀態文字・行政區・類型」，狀態文字不斷字換行 */
+function spotItemHtml(spot, distM) {
+  const status = getSpotStatus(spot.id);
+  const meta = STATUS_META[status];
+  const dist = distM === null || distM === undefined ? '' : `<span class="dist num">${formatKm(distM)}</span>`;
+  return `<li><button type="button" class="spot-item ${meta.cls}" data-id="${spot.id}"
+              aria-current="${state.cardFocus === 'spot' && state.selectedId === spot.id}">
+    <span class="status-dot" title="${meta.label}">${iconSvg(meta.icon)}</span>
+    <span class="meta">
+      <span class="name">${escapeHtml(spot.name)}</span>
+      <span class="sub"><span class="st-label">${meta.label}</span><span class="where">・${escapeHtml(spot.district)}・${SPOT_TYPE_LABEL[spot.type] || ''}</span></span>
+    </span>${dist}</button></li>`;
+}
+
 function renderList() {
-  const html = sortedSpots().map((spot) => {
-    const status = getSpotStatus(spot.id);
-    const meta = STATUS_META[status];
-    const dist = state.userPos
-      ? `<span class="dist num">${formatKm(haversine(state.userPos.lat, state.userPos.lng, spot.lat, spot.lng))}</span>`
-      : '';
-    // 第一行名稱；第二行「狀態文字・行政區・類型」（狀態文字不斷字換行）
-    return `<li><button type="button" class="spot-item ${meta.cls}" data-id="${spot.id}"
-                aria-current="${state.selectedId === spot.id}">
-      <span class="status-dot" title="${meta.label}">${iconSvg(meta.icon)}</span>
-      <span class="meta">
-        <span class="name">${escapeHtml(spot.name)}</span>
-        <span class="sub"><span class="st-label">${meta.label}</span><span class="where">・${escapeHtml(spot.district)}・${SPOT_TYPE_LABEL[spot.type] || ''}</span></span>
-      </span>${dist}</button></li>`;
-  }).join('');
+  const pos = state.userPos;
+  const html = sortedSpots().map((spot) =>
+    spotItemHtml(spot, pos ? haversine(pos.lat, pos.lng, spot.lat, spot.lng) : null)).join('');
   document.querySelectorAll('.js-spotlist').forEach((ul) => { ul.innerHTML = html; });
 }
 
@@ -1515,16 +1542,62 @@ function selectSpot(id, { pan = true } = {}) {
   const spot = RUN_SPOTS.find((s) => s.id === id);
   if (!spot) return;
   state.selectedId = id;
+  state.cardFocus = 'spot';
   setSheet(false);
   if (pan) flyToPoint(spot.lat, spot.lng, CONFIG.SPOT_ZOOM);
   render();
 }
 
-/** 取消選取：資訊卡回到「目前位置」 */
+/** 取消選取：移除搜尋標記，資訊卡回到「目前位置」（Leaflet 拖曳地圖不會觸發 click，不會誤關） */
 function clearSelection() {
-  if (state.selectedId === null) return;
+  if (state.selectedId === null && !state.searchPlace && state.cardFocus === null) return;
+  const outside = state.searchPlace && !state.searchPlace.inTaipei;
   state.selectedId = null;
+  state.searchPlace = null;
+  state.cardFocus = null;
+  renderSearchMarker();
+  if (outside) map.flyTo(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM); // 從市外地點回到台北
   render();
+}
+
+/** 選取搜尋到的地點：平移、放置搜尋標記；台北市內才計算環境狀態 */
+function selectSearchPlace(place) {
+  state.searchPlace = place;
+  state.selectedId = null;
+  state.cardFocus = 'search';
+  setSheet(false);
+  renderSearchMarker();
+  flyToPoint(place.lat, place.lng, place.inTaipei ? CONFIG.SPOT_ZOOM : CONFIG.DEFAULT_ZOOM);
+  if (place.inTaipei) refreshData(); // 氣象查詢納入搜尋位置（即時模式會多一次 Open-Meteo 請求；Mock 模式不發請求）
+  render();
+}
+
+/* =====================================================================
+   §6 換點推薦
+   ===================================================================== */
+/**
+ * 推薦燈號較佳的跑點：只在參考位置為 🟡 / 🔴 時提供（其餘回傳 null＝不顯示推薦區塊）。
+ * 候選：參考點 5 km（Haversine）內、燈號嚴格優於參考點的跑點（資料不足者不列）；
+ * 排序：燈號較佳者在前，同燈號依距離由近到遠；最多 3 筆。
+ * 套用於三種對象：選取的跑點（排除自己）、目前位置、搜尋位置。
+ */
+function recommendSpots(lat, lng, status, excludeId = null) {
+  if (status !== 'yellow' && status !== 'red') return null;
+  const rank = STATUS_ORDER[status];
+  return RUN_SPOTS
+    .filter((sp) => sp.id !== excludeId)
+    .map((sp) => ({ spot: sp, status: getSpotStatus(sp.id), distM: haversine(lat, lng, sp.lat, sp.lng) }))
+    .filter((x) => x.status !== 'unknown' && STATUS_ORDER[x.status] < rank && x.distM <= CONFIG.REC.radiusM)
+    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.distM - b.distM)
+    .slice(0, CONFIG.REC.max);
+}
+
+function recommendHtml(rec) {
+  if (rec === null) return '';
+  return `<section class="rec" aria-label="更佳跑點推薦"><h3 class="rec-title">附近更佳跑點</h3>${
+    rec.length
+      ? `<ul class="spot-list rec-list">${rec.map((x) => spotItemHtml(x.spot, x.distM)).join('')}</ul>`
+      : '<p class="rec-empty">附近暫無更佳跑點，建議改至室內運動</p>'}</section>`;
 }
 
 /* =====================================================================
@@ -1545,9 +1618,9 @@ function metricHtml(ind, reading, ev) {
 
 /**
  * 資訊卡內容。
- * @param {{title:string, sub:string, ev:object, reading:object, closable:boolean}} o
+ * @param {{title:string, sub:string, ev:object, reading:object, closable:boolean, ref:{lat:number,lng:number,excludeId:?number}}} o
  */
-function cardHtml({ title, sub, ev, reading, closable }) {
+function cardHtml({ title, sub, ev, reading, closable, ref }) {
   const status = ev.status;
   const meta = STATUS_META[status];
   const notes = [];
@@ -1564,22 +1637,44 @@ function cardHtml({ title, sub, ev, reading, closable }) {
     <p class="card-advice">${escapeHtml(adviceFor(ev))}</p>
     <div class="metrics">${INDICATORS.map((ind) => metricHtml(ind, reading, ev)).join('')}</div>
     ${notes.map((n) => `<p class="card-note">${escapeHtml(n)}</p>`).join('')}
+    ${ref ? recommendHtml(recommendSpots(ref.lat, ref.lng, status, ref.excludeId)) : ''}
     <p class="card-foot">更新 ${state.data ? formatTaipei(state.data.updatedAt) : '—'}・${escapeHtml(src.label)}</p>
   </article>`;
 }
 
-/** 依狀態決定資訊卡：選取跑點 → 該跑點；否則有定位 → 目前位置；否則提示 */
+/** 搜尋到市界外的地點：只顯示訊息，不計算燈號 */
+function outOfScopeCardHtml(place) {
+  return `<article class="card st-unknown" aria-label="${escapeHtml(place.name)}">
+    <div class="card-head">
+      <span class="status-dot">${iconSvg('i-info')}</span>
+      <div class="titles"><h2 class="card-title">${escapeHtml(place.name)}</h2><p class="card-sub">${escapeHtml(place.sub || '搜尋位置')}</p></div>
+      <button type="button" class="card-close" data-action="clear-selection" aria-label="取消選取，回到台北">${iconSvg('i-x')}</button>
+    </div>
+    <p class="card-advice">目前僅支援台北市</p>
+  </article>`;
+}
+
+/** 依狀態決定資訊卡：搜尋位置 → 選取的跑點 → 目前位置 → 提示 */
 function infoCardHtml() {
   const hint = (msg) => `<div class="card card-hint"><svg class="icon"><use href="#i-info"/></svg>${msg}</div>`;
   if (!state.data) return hint('資料載入中…');
+  const place = state.searchPlace;
+  if (state.cardFocus === 'search' && place) {
+    if (!place.inTaipei) return outOfScopeCardHtml(place);
+    if (!state.searchEvaluation) return hint('資料載入中…');
+    return cardHtml({ title: place.name, sub: place.sub || '搜尋位置', ev: state.searchEvaluation, reading: state.searchReading,
+                      closable: true, ref: { lat: place.lat, lng: place.lng, excludeId: null } });
+  }
   const spot = RUN_SPOTS.find((x) => x.id === state.selectedId);
-  if (spot && state.evaluations[spot.id]) {
+  if (state.cardFocus === 'spot' && spot && state.evaluations[spot.id]) {
     return cardHtml({ title: spot.name, sub: `${spot.district}・${SPOT_TYPE_LABEL[spot.type] || ''}`,
-                      ev: state.evaluations[spot.id], reading: state.readings[spot.id], closable: true });
+                      ev: state.evaluations[spot.id], reading: state.readings[spot.id], closable: true,
+                      ref: { lat: spot.lat, lng: spot.lng, excludeId: spot.id } });
   }
   if (state.userPos && state.userEvaluation) {
     return cardHtml({ title: '目前位置', sub: inBBox(state.userPos.lat, state.userPos.lng) ? '依附近測站與氣象估算' : '不在台北市範圍內',
-                      ev: state.userEvaluation, reading: state.userReading, closable: false });
+                      ev: state.userEvaluation, reading: state.userReading, closable: false,
+                      ref: { lat: state.userPos.lat, lng: state.userPos.lng, excludeId: null } });
   }
   return hint(`點選地圖上的跑點，查看是否適合出發${state.geoFailed ? '<br>（未取得定位，無法顯示目前位置）' : ''}`);
 }
@@ -1638,52 +1733,160 @@ function focusDistrict(name) {
   });
 }
 
-/** 初始化一個搜尋元件（側邊欄與窄螢幕各一個，邏輯共用） */
+/* ---------------------------------------------------------------------
+   地理編碼：OpenStreetMap Nominatim（只在使用者按下「搜尋地點」或 Enter 時查詢）
+   使用條款（https://operations.osmfoundation.org/policies/nominatim/）：
+   - 由使用者操作直接觸發的搜尋可以使用；嚴禁在客戶端實作自動完成（所以不會邊打字邊查）。
+   - 每秒最多 1 次請求（這裡強制間隔 ≥ 1.1 秒）、同樣的查詢只查一次（快取於記憶體）。
+   - 須以 Referer 或 User-Agent 辨識應用程式：瀏覽器無法自訂 User-Agent，靠 Referer 辨識，
+     因此請用 localhost 或 GitHub Pages 開啟；以 file:// 雙擊開啟時沒有 Referer，服務端可能拒絕。
+   - 資料為 ODbL，須標示「© OpenStreetMap 貢獻者」（地圖右下角已標示）。
+   - 回傳非 JSON（被限流時為 HTML 錯誤頁）或逾時一律視為失敗，介面顯示「找不到這個地點，試試地標或路名」。
+   --------------------------------------------------------------------- */
+const geoCache = new Map();
+let geoLastAt = 0;
+
+/** 查詢地點，回傳最多 5 筆 { name, sub, lat, lng, inTaipei }；台北市內的結果排在前面 */
+async function geocode(query) {
+  const key = normQ(query);
+  if (geoCache.has(key)) return geoCache.get(key);
+  const wait = geoLastAt + CONFIG.GEOCODER.minIntervalMs - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  geoLastAt = Date.now();
+  const b = CONFIG.BBOX;
+  const params = new URLSearchParams({
+    q: query.trim(), format: 'jsonv2', countrycodes: 'tw', 'accept-language': 'zh-TW', addressdetails: '1',
+    limit: String(CONFIG.GEOCODER.limit + 3), dedupe: '1',
+    viewbox: `${b.minLng},${b.maxLat},${b.maxLng},${b.minLat}`, bounded: '0', // 台北範圍框只作為優先參考，不限制結果
+  });
+  // 不加 cache: 'no-store'：該選項會讓瀏覽器附上 Cache-Control / Pragma 請求標頭，使跨網域請求多一次 preflight 而被擋
+  const json = await fetchJson(`${CONFIG.GEOCODER.url}?${params}`, CONFIG.FETCH_TIMEOUT_MS, {});
+  if (!Array.isArray(json)) throw new DataError('parse');
+  const out = [];
+  for (const x of json) {
+    const lat = Number(x.lat), lng = Number(x.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const name = (x.name || String(x.display_name || '').split(',')[0] || '').trim();
+    if (!name) continue;
+    // 同名且 400 m 內視為重複（例如同一站名的多個公車站牌）
+    if (out.some((q) => q.name === name && haversine(q.lat, q.lng, lat, lng) < 400)) continue;
+    const a = x.address || {};
+    const sub = [...new Set([a.city_district || a.suburb || a.town, a.city || a.county || a.state].filter(Boolean))].join('・');
+    out.push({ name, sub, lat, lng, inTaipei: pointInPolygon(lat, lng) });
+  }
+  out.sort((p, q) => Number(q.inTaipei) - Number(p.inTaipei)); // 穩定排序：台北市優先
+  const res = out.slice(0, CONFIG.GEOCODER.limit);
+  geoCache.set(key, res);
+  return res;
+}
+
+/** 搜尋標記：深色水滴形圖釘，與跑點（狀態色圓形）、使用者位置（藍點）明顯區分 */
+let searchMarker = null;
+function renderSearchMarker() {
+  const place = state.searchPlace;
+  if (!place) {
+    if (searchMarker) { map.removeLayer(searchMarker); searchMarker = null; }
+    return;
+  }
+  const icon = L.divIcon({
+    className: 'search-marker',
+    html: '<svg viewBox="0 0 32 42" width="32" height="42" aria-hidden="true"><path d="M16 1.5C8.5 1.5 2.5 7.5 2.5 15c0 10 13.5 25.5 13.5 25.5S29.5 25 29.5 15C29.5 7.5 23.5 1.5 16 1.5z" fill="#0F172A" stroke="#fff" stroke-width="2.5"/><circle cx="16" cy="15" r="5.5" fill="#fff"/></svg>',
+    iconSize: [32, 42], iconAnchor: [16, 41],
+  });
+  if (!searchMarker) {
+    searchMarker = L.marker([place.lat, place.lng], { icon, title: place.name, alt: `搜尋位置：${place.name}`, keyboard: true, zIndexOffset: 900 }).addTo(map);
+    searchMarker.on('click', () => { state.cardFocus = 'search'; setSheet(false); render(); });
+  } else {
+    searchMarker.setLatLng([place.lat, place.lng]);
+    searchMarker.setIcon(icon);
+  }
+  searchMarker.bindTooltip(place.name, { direction: 'top', offset: [0, -38] });
+}
+
+/**
+ * 初始化一個搜尋元件（側邊欄與窄螢幕各一個，邏輯共用）。
+ * 兩段式：打字時只做本機比對（跑點、行政區），最後一列固定為「搜尋地點：『輸入文字』」；
+ * 點擊該列或（沒有可選的本機項目、且未用方向鍵選取時）按 Enter 才送出外部查詢，結果最多 5 筆供挑選。
+ */
 function initSearch(root) {
   const input = root.querySelector('input');
   const list = root.querySelector('.search-list');
-  let items = [];
+  let rows = [];        // 目前下拉列：{ type: 'spot'|'district'|'geo'|'result'|'msg', ... }
   let active = -1;
+  let seq = 0;          // 查詢序號：輸入改變或重新查詢時，舊結果作廢
 
   const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
+  const selectable = (i) => rows[i] && rows[i].type !== 'msg';
   const paint = () => {
-    list.querySelectorAll('li[role="option"][data-i]').forEach((li) => {
-      li.setAttribute('aria-selected', String(Number(li.dataset.i) === active));
-    });
+    list.querySelectorAll('li[data-i]').forEach((li) => li.setAttribute('aria-selected', String(Number(li.dataset.i) === active)));
     if (active >= 0) input.setAttribute('aria-activedescendant', `${list.id}-${active}`); else input.removeAttribute('aria-activedescendant');
   };
-  const update = () => {
-    const q = input.value;
-    if (!normQ(q)) { close(); return; }
-    items = searchItems(q);
-    active = -1;
-    list.innerHTML = items.length
-      ? items.map((it, i) => `<li role="option" id="${list.id}-${i}" data-i="${i}" aria-selected="false">
-          <span class="s-kind">${it.kind === 'district' ? '行政區' : '跑點'}</span>${escapeHtml(it.label)}<span class="s-sub">${escapeHtml(it.sub)}</span></li>`).join('')
-      : '<li class="search-empty" role="option" aria-disabled="true">找不到符合的跑點或行政區</li>';
+  const draw = () => {
+    list.innerHTML = rows.map((r, i) => {
+      if (r.type === 'msg') return `<li class="search-empty" role="option" aria-disabled="true">${escapeHtml(r.text)}${r.sub ? `<br><small>${escapeHtml(r.sub)}</small>` : ''}</li>`;
+      if (r.type === 'geo') return `<li class="s-geo" role="option" id="${list.id}-${i}" data-i="${i}" aria-selected="false">${iconSvg('i-search')}搜尋地點：『${escapeHtml(r.query)}』</li>`;
+      const kind = r.type === 'district' ? '行政區' : r.type === 'spot' ? '跑點' : (r.place.inTaipei ? '地點' : '台北市外');
+      const label = r.type === 'result' ? r.place.name : r.label;
+      const sub = r.type === 'result' ? r.place.sub : r.sub;
+      return `<li role="option" id="${list.id}-${i}" data-i="${i}" aria-selected="false"><span class="s-kind">${kind}</span>${escapeHtml(label)}<span class="s-sub">${escapeHtml(sub || '')}</span></li>`;
+    }).join('');
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
+    active = -1;
   };
-  const choose = (it) => {
+  /** 本機比對（純本機，不送出任何請求）＋「搜尋地點」列 */
+  const update = () => {
+    seq++; // 輸入改變：作廢進行中的外部查詢
+    const q = input.value;
+    if (!normQ(q)) { close(); return; }
+    rows = searchItems(q).map((it) => ({ ...it, type: it.kind }));
+    rows.push({ type: 'geo', query: q.trim() });
+    draw();
+  };
+  /** 送出外部地理編碼查詢（只在使用者明確操作時呼叫） */
+  const runGeocode = async () => {
+    const q = input.value.trim();
+    if (!q) return;
+    const mine = ++seq;
+    rows = [{ type: 'msg', text: '搜尋中…' }];
+    draw();
+    let places = [], failed = null;
+    try { places = await geocode(q); } catch (e) { failed = e; }
+    if (mine !== seq) return; // 使用者已改字或重新查詢
+    if (failed || !places.length) {
+      rows = [{ type: 'msg', text: '找不到這個地點，試試地標或路名', sub: failed ? '（地點搜尋服務暫時無法使用，請稍後再試）' : '' }];
+    } else {
+      rows = places.map((p) => ({ type: 'result', place: p }));
+    }
+    draw();
+  };
+  const choose = (r) => {
+    if (!r || r.type === 'msg') return;
+    if (r.type === 'geo') { runGeocode(); return; }
     close();
-    input.value = it.label;
+    input.value = r.type === 'result' ? r.place.name : r.label;
     input.blur(); // 收起手機鍵盤
-    if (it.kind === 'spot') selectSpot(it.id); else focusDistrict(it.label);
+    if (r.type === 'spot') selectSpot(r.id);
+    else if (r.type === 'district') focusDistrict(r.label);
+    else selectSearchPlace(r.place);
   };
 
   input.addEventListener('input', update);
-  input.addEventListener('focus', update);
+  input.addEventListener('focus', () => { if (list.hidden) update(); });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       if (list.hidden) update();
-      if (!items.length) return;
+      const idx = rows.map((_, i) => i).filter(selectable);
+      if (!idx.length) return;
       e.preventDefault();
-      active = e.key === 'ArrowDown' ? (active + 1) % items.length : (active - 1 + items.length) % items.length;
+      const pos = idx.indexOf(active);
+      active = e.key === 'ArrowDown' ? idx[(pos + 1) % idx.length] : idx[(pos - 1 + idx.length) % idx.length];
       paint();
     } else if (e.key === 'Enter') {
-      if (list.hidden) return;
+      if (list.hidden) { if (input.value.trim()) { e.preventDefault(); update(); } return; }
       e.preventDefault();
-      if (items.length) choose(items[active >= 0 ? active : 0]);
+      // 有選取列就選它；否則選第一個可選列（有本機符合者為第一筆，沒有則為「搜尋地點」）
+      choose(selectable(active) ? rows[active] : rows.find((r) => r.type !== 'msg'));
     } else if (e.key === 'Escape') {
       if (!list.hidden) { e.stopPropagation(); close(); } else if (input.value) { input.value = ''; }
     }
@@ -1692,7 +1895,7 @@ function initSearch(root) {
   list.addEventListener('mousedown', (e) => e.preventDefault());
   list.addEventListener('click', (e) => {
     const li = e.target.closest('li[data-i]');
-    if (li) choose(items[Number(li.dataset.i)]);
+    if (li) choose(rows[Number(li.dataset.i)]);
   });
   document.addEventListener('click', (e) => { if (!root.contains(e.target)) close(); });
 }
@@ -2042,7 +2245,7 @@ window.SafeAir = {
   RUN_SPOTS, CONFIG, PM25_SOURCES, state, haversine, selectSpot,
   idwEstimate, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
-  pointInPolygon, TAIPEI_OUTLINE, setHeatmap, getHeatStats: () => heatField && heatField.stats, heatValueAt, heatPixelAt, buildHeatField,
+  pointInPolygon, TAIPEI_OUTLINE, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, heatValueAt, heatPixelAt, buildHeatField,
 };
 
 bootstrap();
