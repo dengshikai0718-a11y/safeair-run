@@ -131,11 +131,11 @@ button { font: inherit; color: inherit; }
 .spot-marker { background: none; border: 0; }
 .spot-marker .pin {
   width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--st); color: #fff; border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, .35); transition: transform .15s ease;
+  background: var(--st); color: #fff; border: 3px solid #fff;
+  box-shadow: 0 0 0 1.5px rgba(15, 23, 42, .55), 0 3px 8px rgba(15, 23, 42, .45); transition: transform .15s ease;
 }
 .spot-marker .pin .icon { width: 18px; height: 18px; stroke-width: 2.5; }
-.spot-marker.is-selected .pin { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(15, 23, 42, .25), 0 2px 6px rgba(15, 23, 42, .35); }
+.spot-marker.is-selected .pin { transform: scale(1.25); box-shadow: 0 0 0 1.5px rgba(15, 23, 42, .55), 0 0 0 5px rgba(15, 23, 42, .22), 0 3px 8px rgba(15, 23, 42, .45); }
 
 /* 使用者位置：藍色圓點＋外圈脈動 */
 .user-marker { background: none; border: 0; }
@@ -214,7 +214,6 @@ button { font: inherit; color: inherit; }
 .heat-legend li { display: flex; align-items: center; gap: 8px; }
 .heat-legend .sw { width: 20px; height: 14px; border-radius: 3px; border: 1px solid var(--line); flex: none; }
 .heat-legend .sw.blank { background: repeating-linear-gradient(45deg, #fff 0 3px, var(--line) 3px 4px); }
-.heat-legend .rng { margin-left: auto; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .heat-legend .note { margin: 8px 0 0; font-size: 12px; color: var(--text-2); line-height: 1.5; }
 /* 窄螢幕：搜尋列（高 48px）下方右側，單一圓形按鈕（圖例收在其面板內） */
 @media (max-width: 767.98px) {
@@ -335,7 +334,7 @@ const CONFIG = {
   PM25_MAX: 500,             // PM2.5 有效範圍上限（> 500 排除）
   MIN_VALID_STATIONS: 2,     // 台北範圍內有效測站 < 2 時改用 Mock
   IDW: { power: 2, snapM: 50, radiiM: [3000, 5000] }, // IDW：p=2、<50m 直接採用、3km → 5km
-  HEAT: { cellM: 300, maxRadiusM: 3000, scale: 4, opacity: 0.5 }, // 熱力圖：300 m 網格、3 km 內無測站即留白、每格放大 4 倍繪製、圖層透明度 0.5
+  HEAT: { cellM: 75, maxRadiusM: 3000, opacity: 0.35, hatchOpacity: 0.55 }, // 熱力圖：75 m 細格直接 IDW、最近測站 > 3 km 即留白（畫斜線）、色塊透明度 0.35
   TAIPEI_UTC_OFFSET_H: 8,    // 台灣無日光節約時間，固定 UTC+8
   OPEN_METEO_URL: 'https://api.open-meteo.com/v1/forecast',
   // CARTO 底圖金鑰（CARTO 已改為需要免費 API 金鑰，否則回傳「API KEY REQUIRED」浮水印圖磚）。
@@ -1020,6 +1019,17 @@ function runTests() {
     const ratio = contrastRatio(css.getPropertyValue(v).trim(), '#FFFFFF');
     cases.push({ name: `對比度 ${v}`, expected: '≥ 4.5', actual: ratio.toFixed(2), ok: ratio >= 4.5 });
   }
+  // 熱力圖與跑點一致：每個跑點位置的熱力圖等級必須等於該跑點 PM2.5 的單項燈號（以目前資料模式的熱力圖檢查）
+  if (state.data && heatField) {
+    for (const sp of RUN_SPOTS) {
+      const reading = state.readings[sp.id];
+      if (!reading || reading.pm25 === null) continue;
+      cases.push({ name: `熱力圖等級 = 跑點 PM2.5 燈號（${sp.name}）`,
+                   expected: classifyIndicator('pm25', reading.pm25),
+                   actual: classifyIndicator('pm25', heatValueAt(sp.lat, sp.lng)),
+                   ok: classifyIndicator('pm25', heatValueAt(sp.lat, sp.lng)) === classifyIndicator('pm25', reading.pm25) });
+    }
+  }
   const failed = cases.filter((c) => !c.ok);
   console.log(`SafeAir 判定測試：${cases.length - failed.length} / ${cases.length} 通過`);
   if (failed.length) console.table(failed);
@@ -1345,120 +1355,153 @@ function locateUser({ recenter = true } = {}) {
 /* =====================================================================
    §11 IDW 網格熱力圖（只在資料更新時計算；開關只切換圖層顯示）
    ===================================================================== */
-const HEAT_COLORS = { green: [16, 185, 129], yellow: [245, 158, 11], red: [239, 68, 68] }; // 與跑點燈號同色
-// 圖例文字（門檻與 classifyIndicator('pm25') 一致：≤15.4 / <35.5 / ≥35.5）
+const HEAT_COLORS = { green: [16, 185, 129], yellow: [245, 158, 11], red: [239, 68, 68] }; // 與跑點燈號同色系
+// 圖例只描述 PM2.5 濃度高低，不使用跑點燈號用語（適合出發／建議留意／不建議前往），
+// 避免「紅色不建議前往標記」壓在「適合出發」綠區上的矛盾。門檻與 classifyIndicator('pm25') 一致。
 const HEAT_LEGEND = [
-  { level: 'green',  label: '適合出發', range: '≤ 15.4' },
-  { level: 'yellow', label: '建議留意', range: '15.5–35.4' },
-  { level: 'red',    label: '不建議前往', range: '≥ 35.5' },
+  { level: 'green',  text: 'PM2.5 低（≤ 15.4）' },
+  { level: 'yellow', text: 'PM2.5 中（15.5–35.4）' },
+  { level: 'red',    text: 'PM2.5 高（≥ 35.5）' },
 ];
-let heatLayer = null;
+// TODO（第 5 階段）：窄螢幕圖例太大會遮住跑點；做 Bottom Sheet 時一併縮小或改為可收合。
+let heatGroup = null;   // L.layerGroup：色塊圖層 + 無資料斜線圖層（一起開關）
+let heatImg = null;     // 色塊 imageOverlay
+let hatchImg = null;    // 無資料斜線 imageOverlay
 let heatOn = false;
-let heatStats = null; // 最近一次計算的統計（測試用）
+let heatField = null;   // 最近一次計算的數值場（供測試與 heatValueAt 使用）
 
 /**
- * 以 IDW 計算 300 m 網格（涵蓋 BBOX）。無測站在 3 km 內的格點為 NaN（留白）。
- * 格點為節點（緯度 minLat + j·dLat，經度 minLng + i·dLng），供後續雙線性內插。
+ * 計算熱力圖數值場，並畫成兩張 canvas（色塊、無資料斜線）。
+ *
+ * 作法：在台北市外框的外接矩形內，以 HEAT.cellM（75 m）的細格逐格做 IDW，不再先算 300 m 網格再內插。
+ * 原因：300 m 網格的節點不會剛好落在測站上，測站附近的峰值（例如青年公園 38 μg/m³）
+ * 會被相鄰節點平均壓低一級；細格直接取值，測站 50 m 內仍採用該測站數值（與跑點的 snap 規則一致）。
+ * - 有值與否：最近測站 ≤ 3 km 才上色，否則留白（無資料）。
+ * - 數值：納入範圍框內全部有效測站做 IDW（距離越遠權重越小，數值在 3 km 邊界連續），
+ *   不再只取 3 km 內測站，避免邊界上「只剩一站」造成孤立色塊。
+ * - 色塊依 PM2.5 門檻離散上色，再以市界多邊形裁切；畫布垂直方向以 Web Mercator 對應，才能與 imageOverlay 對齊。
  */
-function buildHeatGrid(stations) {
-  const { BBOX, HEAT } = CONFIG;
-  const midLat = (BBOX.minLat + BBOX.maxLat) / 2;
-  const dLat = HEAT.cellM / 110950;
-  const dLng = HEAT.cellM / (111320 * Math.cos(midLat * Math.PI / 180));
-  const rows = Math.ceil((BBOX.maxLat - BBOX.minLat) / dLat) + 1;
-  const cols = Math.ceil((BBOX.maxLng - BBOX.minLng) / dLng) + 1;
-  const values = new Float32Array(rows * cols).fill(NaN);
-  let filled = 0;
-  for (let j = 0; j < rows; j++) {
-    const lat = BBOX.minLat + j * dLat;
-    for (let i = 0; i < cols; i++) {
-      const est = idwEstimate(lat, BBOX.minLng + i * dLng, stations, { radiiM: [HEAT.maxRadiusM], cityAvg: false });
-      if (est) { values[j * cols + i] = est.value; filled++; }
-    }
-  }
-  return { rows, cols, dLat, dLng, minLat: BBOX.minLat, minLng: BBOX.minLng, values, filled };
-}
-
-/**
- * 把網格畫成 canvas：雙線性內插（取 4 個鄰近節點，缺值者不參與並重新正規化）→ 依門檻離散上色 → 以台北市外框裁切。
- * 畫布垂直方向以 Web Mercator 對應，才能與 Leaflet 的 imageOverlay 對齊。
- */
-function paintHeatCanvas(g) {
-  const S = CONFIG.HEAT.scale;
-  const W = (g.cols - 1) * S, H = (g.rows - 1) * S;
-  const maxLat = g.minLat + (g.rows - 1) * g.dLat;
+function buildHeatField(stations) {
+  const { HEAT, IDW } = CONFIG;
+  const lats = TAIPEI_OUTLINE.map((q) => q[0]), lngs = TAIPEI_OUTLINE.map((q) => q[1]);
+  const pad = 0.002;
+  const minLat = Math.min(...lats) - pad, maxLat = Math.max(...lats) + pad;
+  const minLng = Math.min(...lngs) - pad, maxLng = Math.max(...lngs) + pad;
+  const midLat = (minLat + maxLat) / 2;
+  const W = Math.ceil((maxLng - minLng) * 111320 * Math.cos(midLat * Math.PI / 180) / HEAT.cellM);
+  const H = Math.ceil((maxLat - minLat) * 110950 / HEAT.cellM);
   const merc = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
   const unmerc = (y) => (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI;
-  const yTop = merc(maxLat), yBot = merc(g.minLat);
+  const yTop = merc(maxLat), yBot = merc(minLat);
 
+  const n = stations.length;
+  const sLat = Float64Array.from(stations, (q) => q.lat);
+  const sLng = Float64Array.from(stations, (q) => q.lng);
+  const sPm = Float64Array.from(stations, (q) => q.pm25);
+  const snap2 = IDW.snapM ** 2, max2 = HEAT.maxRadiusM ** 2, half = IDW.power / 2;
+
+  const values = new Float32Array(W * H).fill(NaN);
   const img = new ImageData(W, H);
+  const blank = new ImageData(W, H); // 無資料遮罩（alpha 255 = 無資料）
+  let filled = 0;
   for (let py = 0; py < H; py++) {
     const lat = unmerc(yTop - (py + 0.5) / H * (yTop - yBot));
-    const fj = Math.min(Math.max((lat - g.minLat) / g.dLat, 0), g.rows - 1 - 1e-9);
-    const j0 = Math.floor(fj), ty = fj - j0;
+    const kx = 111320 * Math.cos(lat * Math.PI / 180);
     for (let px = 0; px < W; px++) {
-      const fi = (px + 0.5) / S;
-      const i0 = Math.min(Math.floor(fi), g.cols - 2), tx = fi - i0;
-      let sw = 0, sv = 0;
-      for (let dj = 0; dj < 2; dj++) for (let di = 0; di < 2; di++) {
-        const v = g.values[(j0 + dj) * g.cols + i0 + di];
-        if (Number.isNaN(v)) continue;
-        const w = (di ? tx : 1 - tx) * (dj ? ty : 1 - ty);
-        sw += w; sv += w * v;
+      const lng = minLng + (px + 0.5) / W * (maxLng - minLng);
+      let best = Infinity, bestPm = NaN, sw = 0, sv = 0;
+      for (let k = 0; k < n; k++) {
+        const dy = (sLat[k] - lat) * 110950, dx = (sLng[k] - lng) * kx;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < best) { best = d2; bestPm = sPm[k]; }
+        const w = d2 === 0 ? 1e12 : d2 ** -half;
+        sw += w; sv += w * sPm[k];
       }
-      if (sw < 0.5) continue; // 四鄰近節點多數無資料：留白（避免外插到測站涵蓋範圍之外）
-      const c = HEAT_COLORS[classifyIndicator('pm25', sv / sw)];
-      const k = (py * W + px) * 4;
-      img.data[k] = c[0]; img.data[k + 1] = c[1]; img.data[k + 2] = c[2]; img.data[k + 3] = 255;
+      const o = (py * W + px) * 4;
+      if (best > max2) { blank.data[o + 3] = 255; continue; } // 3 km 內無測站：留白
+      const v = best < snap2 ? bestPm : sv / sw;
+      values[py * W + px] = v;
+      filled++;
+      const c = HEAT_COLORS[classifyIndicator('pm25', v)];
+      img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
     }
   }
-  const raw = document.createElement('canvas');
-  raw.width = W; raw.height = H;
-  raw.getContext('2d').putImageData(img, 0, 0);
 
-  // 以市界多邊形裁切（putImageData 不受 clip 影響，所以先畫到暫存畫布再 drawImage）
-  const out = document.createElement('canvas');
-  out.width = W; out.height = H;
-  const ctx = out.getContext('2d');
+  // 市界裁切路徑（以 canvas 座標；scale 為畫布相對資料細格的倍率）
+  const clipPath = (ctx, scale) => {
+    ctx.beginPath();
+    TAIPEI_OUTLINE.forEach(([la, ln], i) => {
+      const x = (ln - minLng) / (maxLng - minLng) * W * scale;
+      const y = (yTop - merc(la)) / (yTop - yBot) * H * scale;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+  };
+  const toCanvas = (data, w, h) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').putImageData(data, 0, 0); return c;
+  };
+
+  // 色塊：先畫到暫存畫布，再裁切（putImageData 不受 clip 影響）
+  const color = document.createElement('canvas'); color.width = W; color.height = H;
+  let ctx = color.getContext('2d');
+  clipPath(ctx, 1); ctx.clip(); ctx.drawImage(toCanvas(img, W, H), 0, 0);
+
+  // 無資料斜線：高解析畫布（3 倍）畫 45° 淡灰線，只保留「市界內 ∩ 無資料」，邊緣因縮放自然羽化
+  const HS = 3, hw = W * HS, hh = H * HS;
+  const hatch = document.createElement('canvas'); hatch.width = hw; hatch.height = hh;
+  ctx = hatch.getContext('2d');
+  clipPath(ctx, HS); ctx.clip();
+  ctx.strokeStyle = '#64748B'; ctx.lineWidth = 1.6;
   ctx.beginPath();
-  TAIPEI_OUTLINE.forEach(([lat, lng], n) => {
-    const x = (lng - g.minLng) / g.dLng * S;
-    const y = (yTop - merc(lat)) / (yTop - yBot) * H;
-    if (n === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.closePath();
-  ctx.clip();
-  ctx.drawImage(raw, 0, 0);
-  return { canvas: out, bounds: [[g.minLat, g.minLng], [maxLat, g.minLng + (g.cols - 1) * g.dLng]] };
+  for (let x = -hh; x < hw; x += 9) { ctx.moveTo(x, hh); ctx.lineTo(x + hh, 0); }
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(toCanvas(blank, W, H), 0, 0, hw, hh);
+
+  return { W, H, minLat, maxLat, minLng, maxLng, yTop, yBot, merc, values, filled,
+           bounds: [[minLat, minLng], [maxLat, maxLng]], color, hatch };
 }
 
-/** 資料更新後重新計算熱力圖（computeReadings 之外，只在 refreshData 呼叫） */
+/** 讀取熱力圖在指定座標的數值（μg/m³）；市外或留白回傳 null。測試「熱力圖等級 = 跑點 PM2.5 燈號」用 */
+function heatValueAt(lat, lng) {
+  const f = heatField;
+  if (!f) return null;
+  const px = Math.floor((lng - f.minLng) / (f.maxLng - f.minLng) * f.W);
+  const py = Math.floor((f.yTop - f.merc(lat)) / (f.yTop - f.yBot) * f.H);
+  if (px < 0 || py < 0 || px >= f.W || py >= f.H) return null;
+  const v = f.values[py * f.W + px];
+  return Number.isNaN(v) ? null : v;
+}
+
+/** 資料更新後重新計算熱力圖（只在 refreshData 呼叫；開關不會重算） */
 function updateHeatmap() {
   if (!state.data) return;
   const t0 = performance.now();
-  const g = buildHeatGrid(state.data.pm.stations);
-  const { canvas, bounds } = paintHeatCanvas(g);
-  const url = canvas.toDataURL('image/png');
-  if (!heatLayer) {
-    heatLayer = L.imageOverlay(url, bounds, { opacity: CONFIG.HEAT.opacity, interactive: false, alt: 'PM2.5 熱力圖' });
+  heatField = buildHeatField(state.data.pm.stations);
+  const f = heatField;
+  const colorUrl = f.color.toDataURL('image/png'), hatchUrl = f.hatch.toDataURL('image/png');
+  if (!heatGroup) {
+    heatImg = L.imageOverlay(colorUrl, f.bounds, { opacity: CONFIG.HEAT.opacity, interactive: false, alt: 'PM2.5 熱力圖' });
+    hatchImg = L.imageOverlay(hatchUrl, f.bounds, { opacity: CONFIG.HEAT.hatchOpacity, interactive: false, alt: '' });
+    heatGroup = L.layerGroup([heatImg, hatchImg]);
   } else {
-    heatLayer.setUrl(url);
-    heatLayer.setBounds(bounds);
+    heatImg.setUrl(colorUrl); heatImg.setBounds(f.bounds);
+    hatchImg.setUrl(hatchUrl); hatchImg.setBounds(f.bounds);
   }
-  heatStats = { rows: g.rows, cols: g.cols, filled: g.filled, blank: g.rows * g.cols - g.filled,
-                stations: state.data.pm.stations.length, ms: Math.round(performance.now() - t0) };
-  if (heatOn && !map.hasLayer(heatLayer)) heatLayer.addTo(map);
+  f.stats = { W: f.W, H: f.H, filled: f.filled, stations: state.data.pm.stations.length, ms: Math.round(performance.now() - t0) };
+  if (heatOn && !map.hasLayer(heatGroup)) heatGroup.addTo(map);
 }
 
 /** 開 / 關熱力圖並更新按鈕與圖例 */
 function setHeatmap(on) {
   heatOn = !!on;
-  const btn = document.getElementById('heatBtn');
-  btn.setAttribute('aria-pressed', String(heatOn));
+  document.getElementById('heatBtn').setAttribute('aria-pressed', String(heatOn));
   document.getElementById('heatLegend').hidden = !heatOn;
-  if (heatLayer) {
-    if (heatOn && !map.hasLayer(heatLayer)) heatLayer.addTo(map);
-    if (!heatOn && map.hasLayer(heatLayer)) map.removeLayer(heatLayer);
+  if (heatGroup) {
+    if (heatOn && !map.hasLayer(heatGroup)) heatGroup.addTo(map);
+    if (!heatOn && map.hasLayer(heatGroup)) map.removeLayer(heatGroup);
   }
 }
 
@@ -1467,9 +1510,9 @@ function initHeatControl() {
   const sw = (level) => `rgba(${HEAT_COLORS[level].join(',')},${CONFIG.HEAT.opacity})`; // 與疊在地圖上的實際顯示色一致
   document.getElementById('heatLegend').innerHTML =
     '<h3>PM2.5 推估（μg/m³）</h3><ul>' +
-    HEAT_LEGEND.map((l) => `<li><span class="sw" style="background:${sw(l.level)}"></span>${l.label}<span class="rng">${l.range}</span></li>`).join('') +
-    '<li><span class="sw blank"></span>無資料<span class="rng">3 km 內無測站</span></li></ul>' +
-    '<p class="note">依測站以反距離加權（IDW）估算，僅供參考；實際判定以各跑點燈號為準。</p>';
+    HEAT_LEGEND.map((l) => `<li><span class="sw" style="background:${sw(l.level)}"></span>${l.text}</li>`).join('') +
+    '<li><span class="sw blank"></span>無資料（3 km 內無測站）</li></ul>' +
+    '<p class="note">依測站以反距離加權（IDW）估算，僅反映 PM2.5；各跑點是否適合出發，請看跑點燈號。</p>';
   const ctl = document.getElementById('heatCtl');
   L.DomEvent.disableClickPropagation(ctl); // 點按鈕不要觸發地圖點擊
   L.DomEvent.disableScrollPropagation(ctl);
@@ -1510,7 +1553,7 @@ window.SafeAir = {
   RUN_SPOTS, CONFIG, PM25_SOURCES, state, haversine, selectSpot,
   idwEstimate, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
-  pointInPolygon, TAIPEI_OUTLINE, setHeatmap, getHeatStats: () => heatStats,
+  pointInPolygon, TAIPEI_OUTLINE, setHeatmap, getHeatStats: () => heatField && heatField.stats, heatValueAt,
 };
 
 bootstrap();
