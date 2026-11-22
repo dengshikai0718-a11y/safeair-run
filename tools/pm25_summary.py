@@ -53,7 +53,9 @@ def main():
         print(f"\n{k}：缺漏/null={sum(v is None for v in vals)}  非數值={sum(v is not None and num(v) is None for v in vals)}  "
               f"範圍={min(nums) if nums else '—'}～{max(nums) if nums else '—'}  型別={collections.Counter(type(v).__name__ for v in vals)}")
     pm = [num(r.get(a.pm)) for r in rows]
-    print(f"{a.pm} 等於 0：{sum(x == 0 for x in pm if x is not None)}  <0：{sum(x < 0 for x in pm if x is not None)}  >500：{sum(x > 500 for x in pm if x is not None)}")
+    zero = sum(x == 0 for x in pm if x is not None)
+    print(f"0 值測站數：{zero}（{zero * 100 / n:.0f}%）  <0：{sum(x < 0 for x in pm if x is not None)}  >500：{sum(x > 500 for x in pm if x is not None)}"
+          "  ← 清洗規則：PM2.5 ≤ 0 或 > 500 皆排除")
     ts = [str(r.get(a.ts, "")) for r in rows]
     fmts = collections.Counter(re.sub(r"\d", "9", t) for t in ts)
     print(f"\n時間戳記格式：{dict(fmts.most_common(5))}\n範例：{sorted(ts)[:1]} … {sorted(ts)[-1:]}")
@@ -67,7 +69,7 @@ def main():
         print(f"資料年齡（分鐘）：最新 {min(ages):.0f}、最舊 {max(ages):.0f}、≤60 分鐘 {sum(x <= 60 for x in ages)} 站")
     tp = [r for r in rows if (la := num(r.get(a.lat))) is not None and (lo := num(r.get(a.lon))) is not None
           and BBOX["min_lat"] <= la <= BBOX["max_lat"] and BBOX["min_lng"] <= lo <= BBOX["max_lng"]]
-    print(f"台北範圍框內：{len(tp)} 站，其中 {a.pm}=0 者 {sum(num(r.get(a.pm)) == 0 for r in tp)} 站")
+    print(f"台北範圍框內：{len(tp)} 站，其中 0 值測站數 {sum(num(r.get(a.pm)) == 0 for r in tp)} 站")
     print("\n範例測站（前 12 個欄位）：")
     for r in (tp or rows)[:3]:
         print(" ", {k: r[k] for k in list(r)[:12]})

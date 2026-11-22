@@ -289,7 +289,7 @@ const CONFIG = {
   REFRESH_MS: 10 * 60 * 1000, // 兩個資料來源皆每 10 分鐘自動更新
   FETCH_TIMEOUT_MS: 8000,    // 請求逾時 8 秒視為失敗
   STATION_MAX_AGE_MIN: 60,   // 測站更新時間距今超過 60 分鐘即排除
-  PM25_MIN: 0,               // PM2.5 有效範圍下限（< 0 排除）
+  PM25_MIN: 0,               // PM2.5 有效範圍下限：≤ 0 排除（0 值多為感測異常，見 lassAdapter 註解）
   PM25_MAX: 500,             // PM2.5 有效範圍上限（> 500 排除）
   MIN_VALID_STATIONS: 2,     // 台北範圍內有效測站 < 2 時改用 Mock
   IDW: { power: 2, snapM: 50, radiiM: [3000, 5000] }, // IDW：p=2、<50m 直接採用、3km → 5km
@@ -513,7 +513,16 @@ function describeFailure(sourceName, err) {
   }
 }
 
-/** fetch 加上逾時（AbortController），並把各種失敗統一轉成 DataError */
+/**
+ * fetch 加上逾時（AbortController），並把各種失敗統一轉成 DataError。
+ *
+ * 【已知 Console 錯誤（僅「即時資料」模式）】
+ * 以下兩則紅字由瀏覽器網路層直接輸出，JavaScript 無法攔截或隱藏；程式已正確降級，不影響操作：
+ * 1. LASS：「Access to fetch at 'https://pm25.lass-net.org/...' has been blocked by CORS policy」
+ *    與「net::ERR_FAILED」— LASS 回應未帶 Access-Control-Allow-Origin 標頭，瀏覽器拒絕讓網頁讀取。
+ * 2. Open-Meteo：「429 (Too Many Requests)」— 同一對外 IP 請求過多時的限流（雲端 / 共用網路較常見）。
+ * 三種 Mock 情境（正常 / 高空汙 / 大雨曝曬）不發出任何網路請求，Console 應為零錯誤、零警告。
+ */
 async function fetchJson(url, ms = CONFIG.FETCH_TIMEOUT_MS) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
@@ -542,7 +551,7 @@ async function fetchJson(url, ms = CONFIG.FETCH_TIMEOUT_MS) {
    - 識別：device_id；名稱：SiteName（備援 name）。
    - 實測時資料停在 2026-09-01（Last-Modified 同日），且回應無 Access-Control-Allow-Origin，
      瀏覽器無法讀取 → 會自動降級為 Mock。台北範圍框內 92 站中有 64 站 s_d0 = 0（疑似感測異常，
-     但規格僅排除 < 0 與 > 500，故保留）。
+     會把 IDW 結果嚴重拉低），因此清洗規則為「PM2.5 ≤ 0 或 > 500 皆排除」。
    - 防呆：欄位缺漏 / 非數值 → 該站略過；timestamp 無法解析時改用 date＋time；同 device_id 只取最新一筆。
    --------------------------------------------------------------------- */
 function lassAdapter(json) {
@@ -580,7 +589,7 @@ function staAdapter(json) { // eslint-disable-line no-unused-vars
 }
 
 /**
- * 共用清洗：台北範圍框 → PM2.5 有效範圍（0～500）→ 時效（≤ 60 分鐘）。
+ * 共用清洗：台北範圍框 → PM2.5 有效範圍（> 0 且 ≤ 500；≤ 0 或 > 500 排除）→ 時效（≤ 60 分鐘）。
  * 回傳 { valid, stats }，stats 供判斷失敗原因（例如全部過期 → 來源暫停更新）。
  */
 function cleanStations(stations, now = new Date()) {
@@ -591,7 +600,7 @@ function cleanStations(stations, now = new Date()) {
     if (!inBBox(st.lat, st.lng)) continue;
     stats.inBBox++;
     if (!stats.latest || st.time > stats.latest) stats.latest = st.time;
-    if (st.pm25 < CONFIG.PM25_MIN || st.pm25 > CONFIG.PM25_MAX) { stats.badValue++; continue; }
+    if (st.pm25 <= CONFIG.PM25_MIN || st.pm25 > CONFIG.PM25_MAX) { stats.badValue++; continue; }
     if (now - st.time > maxAgeMs) { stats.stale++; continue; }
     valid.push(st);
   }
@@ -748,6 +757,7 @@ function computeReadings() {
   state.readings = {};
   for (const s of RUN_SPOTS) state.readings[s.id] = readingAt(s.lat, s.lng, `spot-${s.id}`);
   state.userReading = state.userPos ? readingAt(state.userPos.lat, state.userPos.lng, 'user') : null;
+  computeEvaluations();
 }
 
 /** 資料來源狀態（供介面標記與原因說明） */
@@ -805,10 +815,158 @@ function idwEstimate(lat, lng, stations, {
 }
 
 /* =====================================================================
-   §5 判定（第 3 階段實作：三級門檻純函式）
+   §5 判定：三級門檻（連續區間，最高風險一票否決）
    ===================================================================== */
 
-/** 取得跑點目前燈號；判定尚未實作前一律回傳「資料不足」 */
+// 燈號嚴重度：數字越大越嚴重（'unknown' 不參與比較）
+const LEVEL_RANK = { green: 0, yellow: 1, red: 2 };
+
+// 指標定義；陣列順序即「同燈號時的主因優先順序」：PM2.5 > 降雨 > 紫外線 > 體感溫度
+const INDICATORS = [
+  { key: 'pm25',  label: 'PM2.5',    unit: 'μg/m³', digits: 1 },
+  { key: 'rain',  label: '降雨機率', unit: '%',     digits: 0 },
+  { key: 'uvi',   label: '紫外線',   unit: 'UVI',   digits: 1 },
+  { key: 'feels', label: '體感溫度', unit: '°C',    digits: 1 },
+];
+
+/**
+ * 單項指標分級（純函式）。門檻：
+ *   PM2.5：≤ 15.4 綠｜> 15.4 且 < 35.5 黃｜≥ 35.5 紅
+ *   降雨  ：≤ 30 綠  ｜> 30 且 ≤ 60 黃    ｜> 60 紅
+ *   UVI   ：≤ 5.0 綠 ｜> 5.0 且 < 8.0 黃  ｜≥ 8.0 紅
+ *   體感  ：10.0～30.0 綠｜5.0～< 10.0 或 > 30.0～33.0 黃｜< 5.0 或 > 33.0 紅
+ * 回傳 'green' | 'yellow' | 'red'；數值缺失回傳 null。
+ */
+function classifyIndicator(key, v) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return null;
+  switch (key) {
+    case 'pm25':  return v <= 15.4 ? 'green' : v < 35.5 ? 'yellow' : 'red';
+    case 'rain':  return v <= 30 ? 'green' : v <= 60 ? 'yellow' : 'red';
+    case 'uvi':   return v <= 5.0 ? 'green' : v < 8.0 ? 'yellow' : 'red';
+    case 'feels':
+      if (v >= 10.0 && v <= 30.0) return 'green';
+      if ((v >= 5.0 && v < 10.0) || (v > 30.0 && v <= 33.0)) return 'yellow';
+      return 'red';
+    default: return null;
+  }
+}
+
+/**
+ * 總體判定（純函式，方便測試）。
+ * 輸入：{ pm25, rain, uvi, feels }（缺值為 null / undefined）
+ * 輸出：{
+ *   status:  'green' | 'yellow' | 'red' | 'unknown'（四項皆缺 → 資料不足）,
+ *   levels:  { pm25, rain, uvi, feels }（各單項燈號，缺值為 null）,
+ *   primary: { key, level, direction } | null（造成最高風險的指標；全綠或資料不足時為 null；
+ *            direction 僅體感溫度使用：'hot' / 'cold'）,
+ *   missing: 缺值指標 key 陣列, partial: 是否「部分資料暫缺」
+ * }
+ * 規則：任一紅 → 紅；無紅但任一黃 → 黃；有效項皆綠 → 綠；缺值不參與判定。
+ */
+function evaluate(values) {
+  const levels = {}, missing = [];
+  let primary = null;
+  for (const ind of INDICATORS) {
+    const v = values ? values[ind.key] : undefined;
+    const lv = classifyIndicator(ind.key, v);
+    levels[ind.key] = lv;
+    if (lv === null) { missing.push(ind.key); continue; }
+    // 嚴格大於：同燈號時保留陣列中較前面（優先順序較高）的指標
+    if (lv !== 'green' && (!primary || LEVEL_RANK[lv] > LEVEL_RANK[primary.level])) {
+      primary = { key: ind.key, level: lv, direction: ind.key === 'feels' ? (v > 30 ? 'hot' : 'cold') : null };
+    }
+  }
+  const status = missing.length === INDICATORS.length ? 'unknown' : primary ? primary.level : 'green';
+  return { status, levels, primary, missing, partial: missing.length > 0 && status !== 'unknown' };
+}
+
+/** 依主因產生一句白話行動建議 */
+const ADVICE = {
+  pm25:  { yellow: 'PM2.5 略高，敏感族群建議降低強度或縮短時間', red: 'PM2.5 偏高，建議改至室內運動或換個跑點' },
+  rain:  { yellow: '降雨機率偏高，建議攜帶輕便雨具或縮短路線',   red: '降雨機率高，建議改期或改至室內運動' },
+  uvi:   { yellow: '紫外線偏強，建議做好防曬或改在傍晚出發',     red: '紫外線過量，建議改在傍晚或清晨出發' },
+  feels_hot:  { yellow: '體感偏熱，建議放慢配速並多補充水分',   red: '體感炎熱、有中暑風險，建議改在清晨或傍晚' },
+  feels_cold: { yellow: '體感偏涼，建議充分暖身並加件薄外套',   red: '體感寒冷，建議做好保暖或改至室內運動' },
+};
+function adviceFor(ev) {
+  if (!ev || ev.status === 'unknown') return '資料暫缺，暫時無法判斷是否適合出發';
+  if (!ev.primary) return '各項指標良好，適合出發';
+  const k = ev.primary.key === 'feels' ? `feels_${ev.primary.direction}` : ev.primary.key;
+  return ADVICE[k][ev.primary.level];
+}
+
+/** 依目前讀值計算所有跑點與使用者位置的判定結果 */
+function computeEvaluations() {
+  state.evaluations = {};
+  for (const s of RUN_SPOTS) {
+    if (state.readings[s.id]) state.evaluations[s.id] = evaluate(state.readings[s.id]);
+  }
+  state.userEvaluation = state.userReading ? evaluate(state.userReading) : null;
+}
+
+/**
+ * 可在 Console 執行的簡易測試：SafeAir.runTests()
+ * 涵蓋各門檻邊界值、總體判定、缺值處理、主因優先順序，以及狀態文字色對比度（WCAG AA ≥ 4.5:1）。
+ * 回傳 { passed, failed }，失敗項目以 console.table 列出。
+ */
+function runTests() {
+  const cases = [];
+  const t = (name, actual, expected) => cases.push({ name, expected, actual, ok: actual === expected });
+  const L = classifyIndicator;
+  // PM2.5：15.4 / 15.5 / 35.4 / 35.5
+  [[15.4, 'green'], [15.5, 'yellow'], [35.4, 'yellow'], [35.5, 'red'], [0.1, 'green'], [500, 'red']]
+    .forEach(([v, e]) => t(`PM2.5 ${v}`, L('pm25', v), e));
+  // 降雨：30 / 31 / 60 / 61
+  [[0, 'green'], [30, 'green'], [31, 'yellow'], [60, 'yellow'], [61, 'red'], [100, 'red']]
+    .forEach(([v, e]) => t(`降雨 ${v}%`, L('rain', v), e));
+  // UVI：5.0 / 8.0
+  [[5.0, 'green'], [5.1, 'yellow'], [7.9, 'yellow'], [8.0, 'red']]
+    .forEach(([v, e]) => t(`UVI ${v}`, L('uvi', v), e));
+  // 體感：5 / 10 / 30 / 33
+  [[4.9, 'red'], [5, 'yellow'], [9.9, 'yellow'], [10, 'green'], [30, 'green'], [30.1, 'yellow'], [33, 'yellow'], [33.1, 'red'], [-3, 'red']]
+    .forEach(([v, e]) => t(`體感 ${v}°C`, L('feels', v), e));
+  // 總體判定與主因
+  const ok = { pm25: 10, rain: 10, uvi: 3, feels: 24 };
+  t('四項皆綠 → 綠', evaluate(ok).status, 'green');
+  t('全綠無主因', evaluate(ok).primary, null);
+  t('一黃 → 黃', evaluate({ ...ok, uvi: 6.5 }).status, 'yellow');
+  t('一紅一黃 → 紅', evaluate({ ...ok, uvi: 6.5, rain: 80 }).status, 'red');
+  t('一紅一黃主因為紅者', evaluate({ ...ok, uvi: 6.5, rain: 80 }).primary.key, 'rain');
+  t('同為紅燈依優先順序（PM2.5 > UVI）', evaluate({ ...ok, uvi: 9, pm25: 40 }).primary.key, 'pm25');
+  t('同為黃燈依優先順序（降雨 > 體感）', evaluate({ ...ok, feels: 31, rain: 40 }).primary.key, 'rain');
+  t('體感過熱方向', evaluate({ ...ok, feels: 34 }).primary.direction, 'hot');
+  t('體感過冷方向', evaluate({ ...ok, feels: 4 }).primary.direction, 'cold');
+  t('缺一項不參與判定', evaluate({ ...ok, pm25: null }).status, 'green');
+  t('缺一項標示部分暫缺', evaluate({ ...ok, pm25: null }).partial, true);
+  t('缺值時其餘紅燈仍生效', evaluate({ pm25: undefined, rain: 70 }).status, 'red');
+  t('四項皆缺 → 資料不足', evaluate({}).status, 'unknown');
+  t('資料不足不標部分暫缺', evaluate({}).partial, false);
+  t('NaN 視為缺值', evaluate({ ...ok, uvi: NaN }).levels.uvi, null);
+  t('建議文案（紫外線黃）', adviceFor(evaluate({ ...ok, uvi: 6 })), ADVICE.uvi.yellow);
+  // WCAG AA：狀態文字色與次要文字在白底 ≥ 4.5:1
+  const css = getComputedStyle(document.documentElement);
+  for (const v of ['--green-text', '--yellow-text', '--red-text', '--gray-text', '--text-2']) {
+    const ratio = contrastRatio(css.getPropertyValue(v).trim(), '#FFFFFF');
+    cases.push({ name: `對比度 ${v}`, expected: '≥ 4.5', actual: ratio.toFixed(2), ok: ratio >= 4.5 });
+  }
+  const failed = cases.filter((c) => !c.ok);
+  console.log(`SafeAir 判定測試：${cases.length - failed.length} / ${cases.length} 通過`);
+  if (failed.length) console.table(failed);
+  return { passed: cases.length - failed.length, failed: failed.length };
+}
+
+/** WCAG 2 對比度（輸入 #RRGGBB） */
+function contrastRatio(hex1, hex2) {
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const [a, b] = [lum(hex1), lum(hex2)].sort((x, y) => y - x);
+  return (a + 0.05) / (b + 0.05);
+}
+
+/** 取得跑點目前燈號；尚未載入資料時回傳「資料不足」 */
 function getSpotStatus(spotId) {
   const ev = state.evaluations[spotId];
   return ev ? ev.status : 'unknown';
@@ -898,7 +1056,12 @@ function renderMarkers() {
 function spotTooltipHtml(spot) {
   const r = state.readings[spot.id];
   if (!r) return escapeHtml(spot.name);
-  return `<strong>${escapeHtml(spot.name)}</strong><br><span class="num">PM2.5 ${fmtVal(r.pm25, 1)}・降雨 ${fmtVal(r.rain, 0, '%')}・UVI ${fmtVal(r.uvi, 1)}・體感 ${fmtVal(r.feels, 1, '°C')}</span>`;
+  const ev = state.evaluations[spot.id];
+  const meta = STATUS_META[ev ? ev.status : 'unknown'];
+  return `<strong>${escapeHtml(spot.name)}</strong>｜<span class="${meta.cls}" style="color:var(--st-text);font-weight:600">${meta.label}</span>`
+    + `<br>${escapeHtml(adviceFor(ev))}`
+    + `<br><span class="num">PM2.5 ${fmtVal(r.pm25, 1)}・降雨 ${fmtVal(r.rain, 0, '%')}・UVI ${fmtVal(r.uvi, 1)}・體感 ${fmtVal(r.feels, 1, '°C')}</span>`
+    + (ev && ev.partial ? '<br>部分資料暫缺' : '');
 }
 
 /** 數值顯示：缺值顯示「—」 */
@@ -950,23 +1113,26 @@ function addLocateControl() {
 const state = {
   selectedId: null,     // 目前選取的跑點 id
   userPos: null,        // { lat, lng, accuracy }；未取得定位時為 null
-  evaluations: {},      // spotId → 判定結果（第 3 階段起填入）
+  evaluations: {},      // spotId → evaluate() 判定結果
+  userEvaluation: null, // 使用者目前位置的判定結果
   dataMode: 'live',     // 'live' | 'normal' | 'pollution' | 'storm'
   data: null,           // { mode, pm, wx, updatedAt }：最近一次載入的原始資料
   readings: {},         // spotId → { pm25, pmEstimate, rain, uvi, feels }
   userReading: null,    // 使用者目前位置的四項指標
 };
 
-/** 依名稱排序（未取得定位時使用；判定完成後第 5 階段改為燈號＋距離排序） */
+/**
+ * 跑點列表排序：先依燈號（綠 → 黃 → 紅 → 資料不足），
+ * 同燈號再依與使用者的直線距離由近到遠；未取得定位時改依跑點名稱。
+ */
+const STATUS_ORDER = { green: 0, yellow: 1, red: 2, unknown: 3 };
 function sortedSpots() {
-  const list = RUN_SPOTS.slice();
-  if (state.userPos) {
-    const { lat, lng } = state.userPos;
-    list.sort((a, b) => haversine(lat, lng, a.lat, a.lng) - haversine(lat, lng, b.lat, b.lng));
-  } else {
-    list.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
-  }
-  return list;
+  const pos = state.userPos;
+  const tie = pos
+    ? (a, b) => haversine(pos.lat, pos.lng, a.lat, a.lng) - haversine(pos.lat, pos.lng, b.lat, b.lng)
+    : (a, b) => a.name.localeCompare(b.name, 'zh-Hant');
+  return RUN_SPOTS.slice().sort((a, b) =>
+    (STATUS_ORDER[getSpotStatus(a.id)] - STATUS_ORDER[getSpotStatus(b.id)]) || tie(a, b));
 }
 
 /** 渲染側邊欄跑點列表 */
@@ -1119,6 +1285,11 @@ function bootstrap() {
       '<p style="padding:96px 24px;color:var(--text-2);text-align:center">地圖元件載入失敗，請確認網路連線後重新整理。</p>';
     return;
   }
+  // 網址參數 ?mode=normal | pollution | storm 可直接以指定情境開啟（Demo / 驗收用，不發出任何網路請求）
+  try {
+    const m = new URLSearchParams(location.search).get('mode');
+    if (m && DATA_MODES.some((d) => d.id === m)) state.dataMode = m;
+  } catch (e) { /* 忽略無效參數 */ }
   initMap();
   bindUI();
   renderModeSwitch();
@@ -1132,6 +1303,7 @@ function bootstrap() {
 window.SafeAir = {
   RUN_SPOTS, CONFIG, PM25_SOURCES, state, haversine, selectSpot,
   idwEstimate, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
+  classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
 };
 
 bootstrap();

@@ -55,9 +55,56 @@ CARTO 底圖已改為需要（免費）API 金鑰，未帶金鑰時會顯示「A
 3. 若仍需在本機開發，可一併加入 `http://localhost:*`。注意：`file://` 雙擊開啟時瀏覽器不送 Referer，加上限制後本機雙擊可能無法載入底圖，請改用本機伺服器。
 4. 若金鑰疑似被濫用，可在後台重新產生金鑰並更新 `CONFIG.CARTO_API_KEY`。
 
+## 資料模式與 Demo 網址
+
+側邊欄底部可切換「即時資料 / 正常 / 高空汙 / 大雨曝曬」。也可用網址參數直接以情境開啟（不發出任何資料請求）：
+
+```
+index.html?mode=normal      # 正常：青年公園 🔴、大佳河濱公園 🟡、其餘 🟢
+index.html?mode=pollution   # 高空汙：大佳河濱公園 🟡、其餘 PM2.5 ≥ 35.5 🔴
+index.html?mode=storm       # 大雨曝曬：大佳、花博降雨 > 60%，其餘 UVI ≥ 8
+```
+
+## 資料清洗規則（PM2.5 測站）
+
+1. 只保留台北市範圍框內的測站（經度 121.45–121.67、緯度 24.96–25.21）。
+2. 排除 PM2.5 **≤ 0** 或 **> 500** μg/m³ 的測站（LASS 實測約半數測站回報 0，多為感測異常，會嚴重拉低 IDW 估算）。
+3. 排除更新時間距今超過 60 分鐘的測站。
+4. 有效測站 < 2 站或請求失敗（逾時 8 秒）時，自動改用內建 Mock 數據，並顯示「離線 / 展示模式」；滑鼠移到標記上或點擊可看原因。
+
+檢查資料來源欄位（不會印出完整 JSON）：
+
+```bash
+python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.json
+```
+
+## Console 已知錯誤（僅「即時資料」模式）
+
+三種 Mock 情境下 Console 應為零錯誤、零警告。「即時資料」模式下可能出現以下兩類錯誤，它們由瀏覽器網路層直接輸出，網頁程式無法攔截；程式已自動降級為展示數據，不影響操作：
+
+| 錯誤訊息 | 來源 | 原因 |
+| :--- | :--- | :--- |
+| `Access to fetch at 'https://pm25.lass-net.org/...' has been blocked by CORS policy`、`net::ERR_FAILED` | LASS 空氣盒子 | 伺服器回應未帶 `Access-Control-Allow-Origin` 標頭，瀏覽器禁止網頁讀取（另：資料自 2026-09-01 起停止更新） |
+| `429 (Too Many Requests)` | Open-Meteo | 同一對外 IP 請求過多被限流（雲端主機、共用網路較常見，通常稍後即恢復） |
+
+## 判定測試
+
+在瀏覽器 Console 執行：
+
+```js
+SafeAir.runTests()
+```
+
+會測試四項指標的門檻邊界值（15.4 / 15.5 / 35.5、30 / 31 / 60 / 61、5.0 / 8.0、5 / 10 / 30 / 33）、總體判定、缺值處理、主因優先順序，以及狀態文字色的 WCAG AA 對比度，並回報通過數。也可單獨呼叫：
+
+```js
+SafeAir.evaluate({ pm25: 12, rain: 40, uvi: 9, feels: 25 })
+```
+
 ## 專案結構
 
 ```
 index.html   # 全部 HTML / CSS / JavaScript（內嵌，依功能分段註解）
 README.md    # 本文件
+tools/pm25_summary.py  # PM2.5 資料來源欄位摘要腳本
 ```
