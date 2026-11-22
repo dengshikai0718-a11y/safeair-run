@@ -98,7 +98,10 @@ button { font: inherit; color: inherit; }
 .spot-item[aria-current="true"] { background: var(--hover); box-shadow: inset 3px 0 0 var(--text); }
 .spot-item .meta { flex: 1; min-width: 0; }
 .spot-item .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.spot-item .sub { font-size: 13px; color: var(--text-2); }
+.spot-item .sub { display: flex; align-items: baseline; gap: 0; min-width: 0; font-size: 13px; color: var(--text-2); }
+/* 狀態文字放在名稱下方第二行，nowrap 不斷字；地點資訊太長時以省略號截斷 */
+.spot-item .st-label { flex: none; white-space: nowrap; font-weight: 600; color: var(--st-text); }
+.spot-item .where { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .spot-item .dist { font-size: 13px; color: var(--text-2); white-space: nowrap; }
 
 /* 狀態圓形徽章（色塊＋白色圖示），用於列表與標記 */
@@ -116,9 +119,18 @@ button { font: inherit; color: inherit; }
    ===================================================================== */
 #mobileTop {
   position: absolute; z-index: 1000; top: calc(12px + env(safe-area-inset-top)); left: 12px; right: 12px;
-  display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px;
-  background: var(--surface); border-radius: 24px; box-shadow: var(--shadow);
+  display: flex; align-items: center; gap: 8px;
 }
+#mobileTop .search { flex: 1; min-width: 0; }
+.top-btn { width: 48px; height: 48px; flex: none; border: 0; border-radius: 50%; background: var(--surface);
+           color: var(--text); box-shadow: var(--shadow); display: grid; place-items: center; cursor: pointer; }
+.top-btn[aria-expanded="true"] { background: var(--text); color: #fff; }
+/* 窄螢幕設定選單：資料模式、資料來源狀態（第 7 階段加入背景監測） */
+#settingsMenu { position: absolute; z-index: 1300; top: calc(12px + 48px + 8px + env(safe-area-inset-top)); right: 12px;
+                width: min(340px, calc(100% - 24px)); padding: 14px; border-radius: var(--radius);
+                background: var(--surface); box-shadow: var(--shadow); display: grid; gap: 10px; }
+#settingsMenu[hidden] { display: none; }
+#settingsMenu .sb-status { padding: 0; }
 @media (min-width: 768px) { #mobileTop { display: none; } }
 
 /* =====================================================================
@@ -216,10 +228,98 @@ button { font: inherit; color: inherit; }
 .heat-legend .sw.blank { background: repeating-linear-gradient(45deg, #fff 0 5px, #CBD5E1 5px 6px); }
 .heat-legend .note { margin: 8px 0 0; font-size: 12px; color: var(--text-2); line-height: 1.5; }
 /* 窄螢幕：搜尋列（高 48px）下方右側，單一圓形按鈕（圖例收在其面板內） */
+/* 圖例：寬螢幕為完整面板；窄螢幕預設為單行小圖例（不遮住跑點），點一下才展開完整說明 */
+.lg-compact { display: none; }
 @media (max-width: 767.98px) {
-  #heatCtl { top: calc(12px + 48px + 10px + env(safe-area-inset-top)); }
+  #heatCtl { top: calc(12px + 48px + 10px + env(safe-area-inset-top)); flex-direction: row-reverse; align-items: center; }
   .heat-btn { width: var(--touch); padding: 0; border-radius: 50%; }
   .heat-btn .label { display: none; }
+  .heat-legend { width: auto; padding: 0; background: none; box-shadow: none; border-radius: 0; }
+  .lg-compact { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 0; border-radius: 16px;
+                background: var(--surface); box-shadow: var(--shadow); font: 12px var(--font); color: var(--text); cursor: pointer; white-space: nowrap; }
+  .lg-compact .sw { width: 12px; height: 12px; border-radius: 3px; }
+  .lg-compact span.i { display: inline-flex; align-items: center; gap: 3px; }
+  .heat-legend .lg-full { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 232px; padding: 12px 14px;
+                          background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .heat-legend.expanded .lg-full { display: block; }
+}
+
+/* =====================================================================
+   §S8 搜尋、資訊卡、Bottom Sheet（第 5 階段）
+   ===================================================================== */
+/* 搜尋欄（側邊欄與窄螢幕頂部共用） */
+.search { position: relative; }
+.search-box { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--line);
+              border-radius: 12px; background: var(--surface); }
+.search-box:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
+.search-box input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent;
+                    font: 16px var(--font); color: var(--text); } /* 16px 避免 iOS 聚焦時自動放大 */
+.search-box .icon { color: var(--text-2); }
+#mobileTop .search-box { height: 48px; border: 0; border-radius: 24px; box-shadow: var(--shadow); }
+.search-list { position: absolute; z-index: 1300; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px;
+               list-style: none; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow);
+               border: 1px solid var(--line); }
+.search-list[hidden] { display: none; }
+.search-list li { display: flex; align-items: baseline; gap: 8px; min-height: 44px; padding: 8px 10px; border-radius: 8px;
+                  cursor: pointer; align-items: center; }
+.search-list li[aria-selected="true"], .search-list li:hover { background: var(--hover); }
+.search-list .s-kind { flex: none; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--gray-bg); color: var(--gray-text); }
+.search-list .s-sub { margin-left: auto; font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.search-list li.search-empty { cursor: default; color: var(--text-2); }
+.search-list li.search-empty:hover { background: transparent; }
+.sb-search { position: relative; z-index: 5; padding: 12px 16px 8px; }
+
+/* 資訊卡 */
+.card { margin: 4px 12px 8px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.card-head { display: flex; align-items: center; gap: 10px; }
+.card-head .status-dot { width: 36px; height: 36px; }
+.card-head .status-dot .icon { width: 20px; height: 20px; }
+.card-title { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; }
+.card-sub { margin: 0; font-size: 13px; color: var(--text-2); }
+.card-head .titles { flex: 1; min-width: 0; }
+.card-close { width: var(--touch); height: var(--touch); margin: -8px -8px -8px 0; flex: none; border: 0; border-radius: 50%;
+              background: transparent; color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+.card-close:hover { background: var(--hover); }
+.chip { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; padding: 3px 10px; border-radius: 999px;
+        background: var(--st-bg); color: var(--st-text); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.chip .icon { width: 14px; height: 14px; }
+.card-advice { margin: 8px 0 0; font-size: 15px; line-height: 1.5; }
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.metric { padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.metric .m-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.lv-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--st); flex: none; }
+.metric .m-val { margin-top: 2px; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.metric .m-val small { margin-left: 3px; font-size: 12px; font-weight: 400; color: var(--text-2); }
+.card-note { margin: 10px 0 0; font-size: 13px; color: var(--yellow-text); }
+.card-foot { margin: 10px 0 0; font-size: 12px; color: var(--text-2); }
+.card-hint { color: var(--text-2); font-size: 14px; line-height: 1.6; }
+.card-hint .icon { vertical-align: -4px; margin-right: 4px; }
+
+/* Bottom Sheet（窄螢幕）：收合 140px / 展開 80vh，可拖曳、點握把切換 */
+#sheet { display: none; }
+@media (max-width: 767.98px) {
+  :root { --sheet-offset: 152px; } /* 收合高度 140 + 12：定位鈕、縮放鈕、版權文字隨 Sheet 上移 */
+  #sheet {
+    display: flex; flex-direction: column; position: absolute; z-index: 1000; left: 0; right: 0; bottom: 0;
+    height: 140px; background: var(--surface); border-radius: 20px 20px 0 0;
+    box-shadow: 0 -4px 20px rgba(15, 23, 42, .16); transition: height .25s ease; touch-action: none;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  #sheet.expanded { height: 80vh; height: 80dvh; }
+  #sheet.dragging { transition: none; }
+  .sheet-handle { flex: none; width: 100%; height: 28px; border: 0; background: transparent; cursor: grab; display: grid; place-items: center; touch-action: none; }
+  .sheet-handle::before { content: ""; width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+  .sheet-handle:focus-visible { outline-offset: -4px; }
+  .sheet-body { flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }
+  #sheet.expanded .sheet-body { overflow-y: auto; overscroll-behavior: contain; }
+  #sheet .card { margin: 0 12px 8px; border: 0; padding: 4px 4px 8px; }
+  #sheet:not(.expanded) .metrics, #sheet:not(.expanded) .card-foot, #sheet:not(.expanded) .card-note { display: none; }
+  #sheet:not(.expanded) .card-advice { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #sheet:not(.expanded) .chip { margin-top: 6px; }
+  .sheet-more { visibility: hidden; }
+  #sheet.expanded .sheet-more { visibility: visible; }
+  /* 展開時隱藏右下控制鈕（避免與 Sheet 重疊） */
+  body.sheet-open .leaflet-bottom.leaflet-right { opacity: 0; pointer-events: none; }
 }
 
 /* =====================================================================
@@ -247,6 +347,9 @@ button { font: inherit; color: inherit; }
   <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
   <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 17l9 5 9-5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
   <symbol id="i-run" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="1.8"/><path d="M8 21l3-6 3 2v5"/><path d="M6 12l2-4 4-1 3 3 3 1"/><path d="M11 15l1-5"/></symbol>
 </svg>
 
@@ -256,27 +359,58 @@ button { font: inherit; color: inherit; }
     <div class="sb-header">
       <div class="brand"><span class="brand-mark"><svg class="icon"><use href="#i-run"/></svg></span>SafeAir Run</div>
     </div>
+    <!-- 搜尋欄（只搜尋內建跑點與行政區） -->
+    <div class="sb-search">
+      <div class="search" data-search="sidebar">
+        <label class="search-box">
+          <svg class="icon"><use href="#i-search"/></svg>
+          <input type="search" placeholder="搜尋跑點或行政區" autocomplete="off" role="combobox"
+                 aria-label="搜尋跑點或行政區" aria-expanded="false" aria-autocomplete="list" aria-controls="searchList-sidebar">
+        </label>
+        <ul class="search-list" id="searchList-sidebar" role="listbox" hidden></ul>
+      </div>
+    </div>
     <div class="sb-scroll">
+      <!-- 資訊卡：選取跑點時顯示該跑點；未選取時顯示「目前位置」環境狀態 -->
+      <div class="js-card" aria-live="polite"></div>
       <h2 class="sb-section-title">跑點列表</h2>
-      <ul id="spotList" class="spot-list"></ul>
+      <ul class="spot-list js-spotlist"></ul>
     </div>
     <!-- 側邊欄底部：資料更新時間、資料來源狀態、資料模式切換 -->
     <div class="sb-footer">
       <div class="sb-status">
-        <span>資料更新 <time id="updatedAt" class="num">—</time></span>
+        <span>資料更新 <time class="num js-updated">—</time></span>
         <div class="src-wrap" data-src="sidebar"></div>
       </div>
       <div class="field-label" id="modeLabel">資料模式</div>
-      <div class="seg" id="modeSeg" role="group" aria-labelledby="modeLabel"></div>
+      <div class="seg js-modeseg" role="group" aria-labelledby="modeLabel"></div>
     </div>
   </aside>
 
   <main id="mapWrap">
     <div id="map" role="application" aria-label="跑點地圖"></div>
-    <!-- 窄螢幕頂部懸浮列（第 5 階段改為搜尋欄） -->
+    <!-- 窄螢幕頂部懸浮列：搜尋欄＋設定鈕 -->
     <div id="mobileTop">
-      <div class="brand"><span class="brand-mark"><svg class="icon"><use href="#i-run"/></svg></span>SafeAir Run</div>
-      <div class="src-wrap" data-src="mobile"></div>
+      <div class="search" data-search="mobile">
+        <label class="search-box">
+          <svg class="icon"><use href="#i-search"/></svg>
+          <input type="search" placeholder="搜尋跑點或行政區" autocomplete="off" role="combobox"
+                 aria-label="搜尋跑點或行政區" aria-expanded="false" aria-autocomplete="list" aria-controls="searchList-mobile">
+        </label>
+        <ul class="search-list" id="searchList-mobile" role="listbox" hidden></ul>
+      </div>
+      <button type="button" id="settingsBtn" class="top-btn" aria-label="設定" aria-expanded="false" aria-controls="settingsMenu">
+        <svg class="icon"><use href="#i-settings"/></svg>
+      </button>
+    </div>
+    <div id="settingsMenu" hidden>
+      <div class="field-label" id="modeLabelM">資料模式</div>
+      <div class="seg js-modeseg" role="group" aria-labelledby="modeLabelM"></div>
+      <div class="sb-status">
+        <span>資料更新 <time class="num js-updated">—</time></span>
+        <div class="src-wrap" data-src="mobile"></div>
+      </div>
+      <!-- 第 7 階段：背景監測開關與「立即測試通知」放在這裡 -->
     </div>
     <!-- 熱力圖開關與圖例（§11） -->
     <div id="heatCtl">
@@ -285,6 +419,17 @@ button { font: inherit; color: inherit; }
       </button>
       <div id="heatLegend" class="heat-legend" hidden></div>
     </div>
+    <!-- Bottom Sheet（窄螢幕）：收合 140px / 展開 80vh -->
+    <section id="sheet" aria-label="環境狀態">
+      <button type="button" id="sheetHandle" class="sheet-handle" aria-expanded="false" aria-controls="sheetBody" aria-label="展開詳細資訊"></button>
+      <div id="sheetBody" class="sheet-body">
+        <div class="js-card" aria-live="polite"></div>
+        <div class="sheet-more">
+          <h2 class="sb-section-title">跑點列表</h2>
+          <ul class="spot-list js-spotlist"></ul>
+        </div>
+      </div>
+    </section>
     <div id="toast" role="status" aria-live="polite"></div>
   </main>
 </div>
@@ -1242,7 +1387,7 @@ function addLocateControl() {
       L.DomEvent.disableClickPropagation(btn);
       L.DomEvent.on(btn, 'click', () => {
         if (state.userPos) {
-          map.flyTo([state.userPos.lat, state.userPos.lng], Math.max(map.getZoom(), CONFIG.LOCATED_ZOOM));
+          flyToPoint(state.userPos.lat, state.userPos.lng, CONFIG.LOCATED_ZOOM);
         } else {
           locateUser({ recenter: true });
         }
@@ -1265,6 +1410,8 @@ const state = {
   data: null,           // { mode, pm, wx, updatedAt }：最近一次載入的原始資料
   readings: {},         // spotId → { pm25, pmEstimate, rain, uvi, feels }
   userReading: null,    // 使用者目前位置的四項指標
+  geoFailed: false,     // 定位失敗（供資訊卡提示「未取得定位」）
+  sheetExpanded: false, // 窄螢幕 Bottom Sheet 是否展開
 };
 
 /**
@@ -1283,21 +1430,22 @@ function sortedSpots() {
 
 /** 渲染側邊欄跑點列表 */
 function renderList() {
-  const ul = document.getElementById('spotList');
-  ul.innerHTML = sortedSpots().map((spot) => {
+  const html = sortedSpots().map((spot) => {
     const status = getSpotStatus(spot.id);
     const meta = STATUS_META[status];
     const dist = state.userPos
       ? `<span class="dist num">${formatKm(haversine(state.userPos.lat, state.userPos.lng, spot.lat, spot.lng))}</span>`
       : '';
-    return `<li><button type="button" class="spot-item" data-id="${spot.id}"
+    // 第一行名稱；第二行「狀態文字・行政區・類型」（狀態文字不斷字換行）
+    return `<li><button type="button" class="spot-item ${meta.cls}" data-id="${spot.id}"
                 aria-current="${state.selectedId === spot.id}">
-      <span class="status-dot ${meta.cls}" title="${meta.label}">${iconSvg(meta.icon)}</span>
+      <span class="status-dot" title="${meta.label}">${iconSvg(meta.icon)}</span>
       <span class="meta">
         <span class="name">${escapeHtml(spot.name)}</span>
-        <span class="sub">${escapeHtml(spot.district)}・${SPOT_TYPE_LABEL[spot.type] || ''}・<span style="color:var(--st-text)" class="${meta.cls}">${meta.label}</span></span>
+        <span class="sub"><span class="st-label">${meta.label}</span><span class="where">・${escapeHtml(spot.district)}・${SPOT_TYPE_LABEL[spot.type] || ''}</span></span>
       </span>${dist}</button></li>`;
   }).join('');
+  document.querySelectorAll('.js-spotlist').forEach((ul) => { ul.innerHTML = html; });
 }
 
 /** 資料來源標記（側邊欄底部與窄螢幕頂部各一個）與更新時間 */
@@ -1313,14 +1461,18 @@ function renderSourceStatus() {
       <div class="src-pop${wrap.dataset.src === 'mobile' ? ' below' : ''}" id="${popId}" role="tooltip">
         <ul>${st.reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul></div>`;
   });
-  const t = document.getElementById('updatedAt');
-  if (state.data) { t.textContent = formatTaipei(state.data.updatedAt); t.dateTime = state.data.updatedAt.toISOString(); }
+  if (state.data) {
+    document.querySelectorAll('.js-updated').forEach((t) => {
+      t.textContent = formatTaipei(state.data.updatedAt); t.dateTime = state.data.updatedAt.toISOString();
+    });
+  }
 }
 
 /** 資料模式切換按鈕 */
 function renderModeSwitch() {
-  document.getElementById('modeSeg').innerHTML = DATA_MODES.map((m) =>
+  const html = DATA_MODES.map((m) =>
     `<button type="button" data-mode="${m.id}" aria-pressed="${state.dataMode === m.id}">${m.label}</button>`).join('');
+  document.querySelectorAll('.js-modeseg').forEach((seg) => { seg.innerHTML = html; });
 }
 
 /** 切換資料模式並重新載入 */
@@ -1337,29 +1489,297 @@ function render() {
   renderList();
   renderUserMarker();
   renderSourceStatus();
+  renderCards();
 }
 
-/** 選取跑點：地圖平移並更新畫面 */
+/** 目前是否為窄螢幕版面（< 768px） */
+const isNarrow = () => !window.matchMedia('(min-width: 768px)').matches;
+const SHEET_COLLAPSED_PX = 140;
+
+/**
+ * 飛到指定座標。窄螢幕時 Bottom Sheet 蓋住下方，把目標偏移到「可見地圖區」的中央。
+ */
+function flyToPoint(lat, lng, zoom, duration = 0.6) {
+  const z = Math.max(map.getZoom(), zoom);
+  let target = L.latLng(lat, lng);
+  if (isNarrow()) {
+    const pt = map.project(target, z);
+    pt.y += SHEET_COLLAPSED_PX / 2;
+    target = map.unproject(pt, z);
+  }
+  map.flyTo(target, z, { duration });
+}
+
+/** 選取跑點：地圖平移、收合 Sheet 並更新畫面 */
 function selectSpot(id, { pan = true } = {}) {
   const spot = RUN_SPOTS.find((s) => s.id === id);
   if (!spot) return;
   state.selectedId = id;
-  if (pan) map.flyTo([spot.lat, spot.lng], Math.max(map.getZoom(), CONFIG.SPOT_ZOOM), { duration: 0.6 });
+  setSheet(false);
+  if (pan) flyToPoint(spot.lat, spot.lng, CONFIG.SPOT_ZOOM);
   render();
+}
+
+/** 取消選取：資訊卡回到「目前位置」 */
+function clearSelection() {
+  if (state.selectedId === null) return;
+  state.selectedId = null;
+  render();
+}
+
+/* =====================================================================
+   §8-2 資訊卡
+   ===================================================================== */
+const LEVEL_TEXT = { green: '良好', yellow: '留意', red: '不建議', none: '無資料' };
+
+/** 單項指標格：標籤＋燈號圓點、數值（缺值顯示「—」） */
+function metricHtml(ind, reading, ev) {
+  const v = reading ? reading[ind.key] : null;
+  const lv = ev && ev.levels ? ev.levels[ind.key] : null;
+  const cls = lv ? STATUS_META[lv].cls : 'st-unknown';
+  return `<div class="metric ${cls}">
+    <div class="m-label"><span class="lv-dot" role="img" aria-label="${LEVEL_TEXT[lv || 'none']}"></span>${ind.label}</div>
+    <div class="m-val num">${fmtVal(v, ind.digits)}${v === null || v === undefined ? '' : `<small>${ind.unit}</small>`}</div>
+  </div>`;
+}
+
+/**
+ * 資訊卡內容。
+ * @param {{title:string, sub:string, ev:object, reading:object, closable:boolean}} o
+ */
+function cardHtml({ title, sub, ev, reading, closable }) {
+  const status = ev.status;
+  const meta = STATUS_META[status];
+  const notes = [];
+  if (ev.partial && status !== 'unknown') notes.push('部分資料暫缺');
+  if (reading && reading.pmEstimate && reading.pmEstimate.coverage === 'none') notes.push('附近無測站，以全市測站估算');
+  const src = getSourceStatus();
+  return `<article class="card ${meta.cls}" aria-label="${escapeHtml(title)}環境狀態">
+    <div class="card-head">
+      <span class="status-dot">${iconSvg(meta.icon)}</span>
+      <div class="titles"><h2 class="card-title">${escapeHtml(title)}</h2><p class="card-sub">${escapeHtml(sub)}</p></div>
+      ${closable ? `<button type="button" class="card-close" data-action="clear-selection" aria-label="取消選取，改看目前位置">${iconSvg('i-x')}</button>` : ''}
+    </div>
+    <span class="chip">${iconSvg(meta.icon)}${meta.label}</span>
+    <p class="card-advice">${escapeHtml(adviceFor(ev))}</p>
+    <div class="metrics">${INDICATORS.map((ind) => metricHtml(ind, reading, ev)).join('')}</div>
+    ${notes.map((n) => `<p class="card-note">${escapeHtml(n)}</p>`).join('')}
+    <p class="card-foot">更新 ${state.data ? formatTaipei(state.data.updatedAt) : '—'}・${escapeHtml(src.label)}</p>
+  </article>`;
+}
+
+/** 依狀態決定資訊卡：選取跑點 → 該跑點；否則有定位 → 目前位置；否則提示 */
+function infoCardHtml() {
+  const hint = (msg) => `<div class="card card-hint"><svg class="icon"><use href="#i-info"/></svg>${msg}</div>`;
+  if (!state.data) return hint('資料載入中…');
+  const spot = RUN_SPOTS.find((x) => x.id === state.selectedId);
+  if (spot && state.evaluations[spot.id]) {
+    return cardHtml({ title: spot.name, sub: `${spot.district}・${SPOT_TYPE_LABEL[spot.type] || ''}`,
+                      ev: state.evaluations[spot.id], reading: state.readings[spot.id], closable: true });
+  }
+  if (state.userPos && state.userEvaluation) {
+    return cardHtml({ title: '目前位置', sub: inBBox(state.userPos.lat, state.userPos.lng) ? '依附近測站與氣象估算' : '不在台北市範圍內',
+                      ev: state.userEvaluation, reading: state.userReading, closable: false });
+  }
+  return hint(`點選地圖上的跑點，查看是否適合出發${state.geoFailed ? '<br>（未取得定位，無法顯示目前位置）' : ''}`);
+}
+
+function renderCards() {
+  const html = infoCardHtml();
+  document.querySelectorAll('.js-card').forEach((el) => { el.innerHTML = html; });
+}
+
+/* =====================================================================
+   §8-3 搜尋（只搜尋內建跑點與行政區；最多 5 筆；鍵盤可操作）
+   ===================================================================== */
+const SEARCH_MAX = 5;
+const normQ = (str) => str.trim().toLowerCase().replace(/臺/g, '台');
+
+/** 建立搜尋索引：行政區（來自跑點資料）＋跑點 */
+function buildSearchIndex() {
+  const items = [];
+  const districts = [...new Set(RUN_SPOTS.map((x) => x.district))];
+  for (const d of districts) {
+    const n = RUN_SPOTS.filter((x) => x.district === d).length;
+    items.push({ kind: 'district', label: d, sub: `${n} 個跑點`, key: normQ(d), alt: normQ(d.replace(/區$/, '')) });
+  }
+  for (const sp of RUN_SPOTS) {
+    items.push({ kind: 'spot', id: sp.id, label: sp.name, sub: sp.district, key: normQ(sp.name), alt: '' });
+  }
+  return items;
+}
+
+/** 比對：行政區開頭相符最優先，其次跑點名稱開頭，再其次部分相符 */
+function searchItems(q) {
+  const n = normQ(q);
+  if (!n) return [];
+  const idx = buildSearchIndex();
+  const scored = [];
+  idx.forEach((it, i) => {
+    let score = null;
+    if (it.kind === 'district') {
+      if (it.key.startsWith(n) || it.alt.startsWith(n)) score = 0;
+      else if (it.key.includes(n)) score = 2;
+    } else if (it.key.startsWith(n)) score = 1;
+    else if (it.key.includes(n)) score = 3;
+    if (score !== null) scored.push({ it, score, i });
+  });
+  return scored.sort((a, b) => a.score - b.score || a.i - b.i).slice(0, SEARCH_MAX).map((x) => x.it);
+}
+
+/** 行政區：縮放到該區全部跑點 */
+function focusDistrict(name) {
+  const spots = RUN_SPOTS.filter((x) => x.district === name);
+  if (!spots.length) return;
+  setSheet(false);
+  const bottom = isNarrow() ? SHEET_COLLAPSED_PX + 40 : 60;
+  map.fitBounds(L.latLngBounds(spots.map((x) => [x.lat, x.lng])), {
+    paddingTopLeft: [60, isNarrow() ? 120 : 60], paddingBottomRight: [60, bottom], maxZoom: CONFIG.SPOT_ZOOM, animate: true,
+  });
+}
+
+/** 初始化一個搜尋元件（側邊欄與窄螢幕各一個，邏輯共用） */
+function initSearch(root) {
+  const input = root.querySelector('input');
+  const list = root.querySelector('.search-list');
+  let items = [];
+  let active = -1;
+
+  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
+  const paint = () => {
+    list.querySelectorAll('li[role="option"][data-i]').forEach((li) => {
+      li.setAttribute('aria-selected', String(Number(li.dataset.i) === active));
+    });
+    if (active >= 0) input.setAttribute('aria-activedescendant', `${list.id}-${active}`); else input.removeAttribute('aria-activedescendant');
+  };
+  const update = () => {
+    const q = input.value;
+    if (!normQ(q)) { close(); return; }
+    items = searchItems(q);
+    active = -1;
+    list.innerHTML = items.length
+      ? items.map((it, i) => `<li role="option" id="${list.id}-${i}" data-i="${i}" aria-selected="false">
+          <span class="s-kind">${it.kind === 'district' ? '行政區' : '跑點'}</span>${escapeHtml(it.label)}<span class="s-sub">${escapeHtml(it.sub)}</span></li>`).join('')
+      : '<li class="search-empty" role="option" aria-disabled="true">找不到符合的跑點或行政區</li>';
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+  };
+  const choose = (it) => {
+    close();
+    input.value = it.label;
+    input.blur(); // 收起手機鍵盤
+    if (it.kind === 'spot') selectSpot(it.id); else focusDistrict(it.label);
+  };
+
+  input.addEventListener('input', update);
+  input.addEventListener('focus', update);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (list.hidden) update();
+      if (!items.length) return;
+      e.preventDefault();
+      active = e.key === 'ArrowDown' ? (active + 1) % items.length : (active - 1 + items.length) % items.length;
+      paint();
+    } else if (e.key === 'Enter') {
+      if (list.hidden) return;
+      e.preventDefault();
+      if (items.length) choose(items[active >= 0 ? active : 0]);
+    } else if (e.key === 'Escape') {
+      if (!list.hidden) { e.stopPropagation(); close(); } else if (input.value) { input.value = ''; }
+    }
+  });
+  // mousedown 先 preventDefault，避免輸入框先失焦導致選單消失而吃掉點擊
+  list.addEventListener('mousedown', (e) => e.preventDefault());
+  list.addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-i]');
+    if (li) choose(items[Number(li.dataset.i)]);
+  });
+  document.addEventListener('click', (e) => { if (!root.contains(e.target)) close(); });
+}
+
+/* =====================================================================
+   §8-4 Bottom Sheet（窄螢幕）與設定選單
+   ===================================================================== */
+/** 讓右下控制鈕與 toast 隨 Sheet 高度上移；寬螢幕還原預設 */
+function updateSheetOffset(h) {
+  const root = document.documentElement.style;
+  if (isNarrow()) root.setProperty('--sheet-offset', `${Math.round(h) + 12}px`); else root.removeProperty('--sheet-offset');
+}
+
+/** 展開 / 收合 Sheet */
+function setSheet(expanded) {
+  const sheet = document.getElementById('sheet');
+  state.sheetExpanded = !!expanded;
+  sheet.style.height = '';
+  sheet.classList.toggle('expanded', state.sheetExpanded);
+  document.body.classList.toggle('sheet-open', state.sheetExpanded);
+  const handle = document.getElementById('sheetHandle');
+  handle.setAttribute('aria-expanded', String(state.sheetExpanded));
+  handle.setAttribute('aria-label', state.sheetExpanded ? '收合詳細資訊' : '展開詳細資訊');
+  updateSheetOffset(state.sheetExpanded ? window.innerHeight * 0.8 : SHEET_COLLAPSED_PX);
+}
+
+/** 握把：點一下切換；上下拖曳改變高度，放開時吸附到收合或展開 */
+function initSheet() {
+  const sheet = document.getElementById('sheet');
+  const handle = document.getElementById('sheetHandle');
+  let startY = 0, startH = 0, h = 0, drag = false, moved = false;
+  const max = () => window.innerHeight * 0.8;
+  handle.addEventListener('pointerdown', (e) => {
+    drag = true; moved = false; startY = e.clientY; startH = sheet.offsetHeight; h = startH;
+    handle.setPointerCapture(e.pointerId);
+    sheet.classList.add('dragging');
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dy = startY - e.clientY;
+    if (Math.abs(dy) > 6) moved = true;
+    if (!moved) return;
+    h = Math.min(Math.max(startH + dy, SHEET_COLLAPSED_PX), max());
+    sheet.style.height = `${h}px`;
+    updateSheetOffset(h);
+  });
+  const end = () => {
+    if (!drag) return;
+    drag = false;
+    sheet.classList.remove('dragging');
+    if (!moved) setSheet(!state.sheetExpanded);
+    else setSheet(h > (SHEET_COLLAPSED_PX + max()) / 2);
+  };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+  // 鍵盤（Enter / Space）會觸發 click 且 detail 為 0
+  handle.addEventListener('click', (e) => { if (e.detail === 0) setSheet(!state.sheetExpanded); });
+}
+
+/** 設定選單開關（窄螢幕） */
+function toggleSettings(open) {
+  const menu = document.getElementById('settingsMenu');
+  const btn = document.getElementById('settingsBtn');
+  const willOpen = open === undefined ? menu.hidden : open;
+  menu.hidden = !willOpen;
+  btn.setAttribute('aria-expanded', String(willOpen));
 }
 
 /** 綁定 UI 事件 */
 function bindUI() {
-  // 列表點擊（事件委派）
-  document.getElementById('spotList').addEventListener('click', (e) => {
-    const btn = e.target.closest('.spot-item');
-    if (btn) selectSpot(Number(btn.dataset.id));
+  // 列表點擊、資訊卡關閉鈕、資料模式切換（事件委派；側邊欄與 Sheet 各有一份）
+  document.addEventListener('click', (e) => {
+    const item = e.target.closest('.spot-item');
+    if (item) { selectSpot(Number(item.dataset.id)); return; }
+    if (e.target.closest('[data-action="clear-selection"]')) { clearSelection(); return; }
+    const modeBtn = e.target.closest('.js-modeseg button[data-mode]');
+    if (modeBtn) setDataMode(modeBtn.dataset.mode);
   });
-  // 資料模式切換
-  document.getElementById('modeSeg').addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-mode]');
-    if (btn) setDataMode(btn.dataset.mode);
+  // 地圖空白處點一下：取消選取
+  map.on('click', () => { clearSelection(); toggleSettings(false); });
+  // 窄螢幕：設定選單
+  document.getElementById('settingsBtn').addEventListener('click', () => toggleSettings());
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#settingsMenu') && !e.target.closest('#settingsBtn')) toggleSettings(false);
   });
+  document.querySelectorAll('.search[data-search]').forEach(initSearch);
+  initSheet();
   // 資料來源標記：點擊切換原因說明（觸控裝置無 hover）；點其他地方或按 Esc 關閉
   document.addEventListener('click', (e) => {
     const badge = e.target.closest('.src-badge');
@@ -1371,11 +1791,11 @@ function bindUI() {
     });
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') document.querySelectorAll('.src-wrap.open').forEach((w) => w.classList.remove('open'));
+    if (e.key === 'Escape') { document.querySelectorAll('.src-wrap.open').forEach((w) => w.classList.remove('open')); toggleSettings(false); }
   });
   // 版面在 768px 斷點切換時，地圖容器尺寸改變，需通知 Leaflet 重算
   const mq = window.matchMedia('(min-width: 768px)');
-  const onChange = () => map.invalidateSize();
+  const onChange = () => { map.invalidateSize(); setSheet(false); };
   if (mq.addEventListener) mq.addEventListener('change', onChange); else mq.addListener(onChange);
 }
 
@@ -1390,19 +1810,21 @@ function bindUI() {
  */
 function locateUser({ recenter = true } = {}) {
   if (!('geolocation' in navigator)) {
+    state.geoFailed = true; renderCards();
     showToast('未取得定位：此瀏覽器不支援定位，以台北車站為中心顯示');
     return;
   }
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       const first = !state.userPos;
+      state.geoFailed = false;
       state.userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
       // 首次取得定位：重新載入，讓氣象請求納入使用者座標；之後只重算 IDW
       if (first) refreshData(); else if (state.data) computeReadings();
       render();
       if (!recenter) return;
       if (inBBox(state.userPos.lat, state.userPos.lng)) {
-        map.flyTo([state.userPos.lat, state.userPos.lng], CONFIG.LOCATED_ZOOM, { duration: 0.8 });
+        flyToPoint(state.userPos.lat, state.userPos.lng, CONFIG.LOCATED_ZOOM, 0.8);
       } else {
         showToast('目前位置不在台北市範圍內，仍以全市跑點顯示');
       }
@@ -1411,6 +1833,7 @@ function locateUser({ recenter = true } = {}) {
       const reason = err && err.code === 1 ? '定位權限被拒絕'
                    : err && err.code === 3 ? '定位逾時'
                    : '無法取得位置';
+      state.geoFailed = true; renderCards();
       showToast(`未取得定位（${reason}），以台北車站為中心顯示`);
     },
     { enableHighAccuracy: true, timeout: CONFIG.GEO_TIMEOUT_MS, maximumAge: 60000 }
@@ -1428,7 +1851,6 @@ const HEAT_LEGEND = [
   { level: 'yellow', text: 'PM2.5 中（15.5–35.4）' },
   { level: 'red',    text: 'PM2.5 高（≥ 35.5）' },
 ];
-// TODO（第 5 階段）：窄螢幕圖例太大會遮住跑點；做 Bottom Sheet 時一併縮小或改為可收合。
 let heatGroup = null;   // L.layerGroup：色塊圖層 + 無資料斜線圖層（一起開關）
 let heatImg = null;     // 色塊 imageOverlay
 let hatchImg = null;    // 無資料斜線 imageOverlay
@@ -1556,6 +1978,7 @@ function setHeatmap(on) {
   heatOn = !!on;
   document.getElementById('heatBtn').setAttribute('aria-pressed', String(heatOn));
   document.getElementById('heatLegend').hidden = !heatOn;
+  if (!heatOn) document.getElementById('heatLegend').classList.remove('expanded');
   if (heatGroup) {
     if (heatOn && !map.hasLayer(heatGroup)) heatGroup.addTo(map);
     if (!heatOn && map.hasLayer(heatGroup)) map.removeLayer(heatGroup);
@@ -1565,11 +1988,20 @@ function setHeatmap(on) {
 /** 建立圖例並綁定開關 */
 function initHeatControl() {
   const sw = (level) => `rgba(${HEAT_COLORS[level].join(',')},${CONFIG.HEAT.opacity})`; // 與疊在地圖上的實際顯示色一致
-  document.getElementById('heatLegend').innerHTML =
-    '<h3>PM2.5 推估（μg/m³）</h3><ul>' +
+  const full = '<h3>PM2.5 推估（μg/m³）</h3><ul>' +
     HEAT_LEGEND.map((l) => `<li><span class="sw" style="background:${sw(l.level)}"></span>${l.text}</li>`).join('') +
     '<li><span class="sw blank"></span>無資料（3 km 內無測站）</li></ul>' +
     '<p class="note">依測站以反距離加權（IDW）估算，僅反映 PM2.5；各跑點是否適合出發，請看跑點燈號。</p>';
+  // 窄螢幕的單行小圖例：低 / 中 / 高 / 無資料；點一下展開完整說明
+  const short = ['低', '中', '高'];
+  const compact = 'PM2.5 ' + HEAT_LEGEND.map((l, i) => `<span class="i"><span class="sw" style="background:${sw(l.level)}"></span>${short[i]}</span>`).join('') +
+    '<span class="i"><span class="sw blank"></span>無資料</span>';
+  const legend = document.getElementById('heatLegend');
+  legend.innerHTML = `<button type="button" class="lg-compact" aria-expanded="false" aria-label="PM2.5 圖例，點一下展開說明">${compact}</button><div class="lg-full">${full}</div>`;
+  legend.querySelector('.lg-compact').addEventListener('click', (e) => {
+    const open = legend.classList.toggle('expanded');
+    e.currentTarget.setAttribute('aria-expanded', String(open));
+  });
   const ctl = document.getElementById('heatCtl');
   L.DomEvent.disableClickPropagation(ctl); // 點按鈕不要觸發地圖點擊
   L.DomEvent.disableScrollPropagation(ctl);
