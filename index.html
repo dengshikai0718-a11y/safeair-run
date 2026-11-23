@@ -336,6 +336,49 @@ button { font: inherit; color: inherit; }
 }
 
 /* =====================================================================
+   §S9 背景監測、提醒橫幅、地圖選點的觸控設定
+   ===================================================================== */
+/* 長按選點：避免 iOS Safari 跳出系統選單 / 選取文字、Android 長按選單 */
+#map, .leaflet-container { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.card-tip { margin: 10px 0 0; font-size: 12px; color: var(--text-2); }
+
+.mon { display: grid; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.mon-row { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
+#settingsMenu .mon { border-bottom: 0; padding-bottom: 0; }
+.switch { position: relative; width: 52px; height: 32px; border: 0; border-radius: 16px; background: var(--line); cursor: pointer; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff;
+                 box-shadow: 0 1px 3px rgba(15, 23, 42, .3); transition: transform .15s ease; }
+.switch[aria-checked="true"] { background: var(--green-text); }
+.switch[aria-checked="true"]::after { transform: translateX(20px); }
+.mon-status { margin: 0; font-size: 13px; font-weight: 600; }
+.mon-note { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.mon-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 2px; }
+.btn { min-height: var(--touch); padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+       font: 600 14px var(--font); color: var(--text); cursor: pointer; }
+.btn:hover { background: var(--hover); }
+.link-btn { min-height: var(--touch); padding: 0 4px; border: 0; background: none; font: 13px var(--font); color: var(--focus);
+            text-decoration: underline; cursor: pointer; }
+.mon-msg { margin: 0; min-height: 1em; font-size: 12px; color: var(--text-2); }
+#settingsMenu { max-height: calc(100% - 96px); overflow-y: auto; }
+
+#alerts { position: absolute; z-index: 1400; top: 12px; left: 50%; transform: translateX(-50%); width: min(480px, calc(100% - 24px));
+          display: grid; gap: 8px; pointer-events: none; }
+.alert { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; padding: 12px 8px 12px 12px; border-radius: var(--radius);
+         background: var(--surface); border-left: 6px solid var(--st); box-shadow: var(--shadow); }
+.alert .status-dot { margin-top: 2px; }
+.alert-body { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; }
+.alert-body strong { font-size: 15px; }
+.alert-body p { margin: 2px 0 0; }
+.alert-note { font-size: 12px; color: var(--text-2); }
+.alert-close { width: var(--touch); height: var(--touch); margin: -8px 0 -8px auto; flex: none; border: 0; border-radius: 50%; background: transparent;
+               color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+.alert-close:hover { background: var(--hover); }
+@media (max-width: 767.98px) {
+  /* 窄螢幕：放在搜尋列與熱力圖鈕下方，不蓋住它們 */
+  #alerts { top: calc(12px + 48px + 10px + 44px + 8px + env(safe-area-inset-top)); }
+}
+
+/* =====================================================================
    §S6 小提示（Toast）
    ===================================================================== */
 #toast {
@@ -395,6 +438,7 @@ button { font: inherit; color: inherit; }
         <span>資料更新 <time class="num js-updated">—</time></span>
         <div class="src-wrap" data-src="sidebar"></div>
       </div>
+      <div class="js-monitor mon"></div>
       <div class="field-label" id="modeLabel">資料模式</div>
       <div class="seg js-modeseg" role="group" aria-labelledby="modeLabel"></div>
     </div>
@@ -423,8 +467,10 @@ button { font: inherit; color: inherit; }
         <span>資料更新 <time class="num js-updated">—</time></span>
         <div class="src-wrap" data-src="mobile"></div>
       </div>
-      <!-- 第 7 階段：背景監測開關與「立即測試通知」放在這裡 -->
+      <div class="js-monitor mon"></div>
     </div>
+    <!-- 提醒橫幅（背景監測觸發時顯示，可關閉） -->
+    <div id="alerts"></div>
     <!-- 熱力圖開關與圖例（§11） -->
     <div id="heatCtl">
       <button type="button" id="heatBtn" class="heat-btn" aria-pressed="false" aria-controls="heatLegend" aria-label="PM2.5 熱力圖" title="PM2.5 熱力圖">
@@ -498,6 +544,8 @@ const CONFIG = {
   // 每秒最多 1 次請求、須能辨識應用程式（瀏覽器會帶 Referer）、不得做自動完成、只能由使用者按下搜尋時觸發。
   GEOCODER: { url: 'https://nominatim.openstreetmap.org/search', minIntervalMs: 1100, limit: 5 },
   REC: { radiusM: 5000, max: 3 }, // 換點推薦：5 km 內、最多 3 筆
+  PICK: { holdMs: 500, moveTolPx: 10 }, // 地圖選點：觸控長按 500 ms、手指移動超過 10 px 即取消
+  MONITOR: { cooldownMin: 60 },         // 背景監測：同一行政區 60 分鐘內不重複提醒
   OPEN_METEO_URL: 'https://api.open-meteo.com/v1/forecast',
   // CARTO 底圖金鑰（CARTO 已改為需要免費 API 金鑰，否則回傳「API KEY REQUIRED」浮水印圖磚）。
   // 此金鑰會隨前端程式公開；部署後請至 CARTO 後台將金鑰限制在部署網域（Referer），見 README。
@@ -903,6 +951,17 @@ function buildMockWeather(scenarioId, points) {
   return byKey;
 }
 
+/** 行政區判定（離線、近似）：市界外回傳「台北市外」，否則取最近的行政區中心點 */
+function districtOf(lat, lng) {
+  if (!pointInPolygon(lat, lng)) return OUTSIDE_DISTRICT;
+  let best = null, bestD = Infinity;
+  for (const [name, la, ln] of DISTRICT_CENTROIDS) {
+    const d = haversine(lat, lng, la, ln);
+    if (d < bestD) { best = name; bestD = d; }
+  }
+  return best;
+}
+
 /** 找出離指定座標最近的跑點 */
 function nearestSpot(lat, lng) {
   let best = null, bestD = Infinity;
@@ -950,6 +1009,15 @@ async function refreshData() {
   computeReadings();
   updateHeatmap(); // 熱力圖只在資料更新時重算
   render();
+  monitorCheck();   // 背景監測：隨每次資料更新檢查燈號是否轉差
+  scheduleRefresh();
+}
+
+/** 下一次自動更新排在「這次更新完成後」10 分鐘（切換模式等手動更新也會重新計時，監測顯示的下次檢查時間才準） */
+let refreshTimer = null;
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(refreshData, CONFIG.REFRESH_MS);
 }
 
 /** 由測站與氣象計算每個跑點（及使用者位置）的四項指標 */
@@ -1043,6 +1111,18 @@ const TAIPEI_OUTLINE = [
   [25.1514, 121.4874], [25.1502, 121.4829], [25.1315, 121.4656], [25.1276, 121.4643],
   [25.1243, 121.4648], [25.1229, 121.4588], [25.1162, 121.4609],
 ];
+
+/**
+ * 台北市 12 行政區的近似中心點。行政區判定＝距離最近的中心點；不在市界內者為「台北市外」。
+ * 這是離線的粗略判定（行政區交界附近可能差一區），只用於資訊卡副標與通知冷卻分組，不做反向地理編碼。
+ */
+const DISTRICT_CENTROIDS = [
+  ['中正區', 25.0324, 121.5198], ['大同區', 25.0633, 121.5130], ['中山區', 25.0685, 121.5330],
+  ['松山區', 25.0577, 121.5577], ['大安區', 25.0267, 121.5435], ['萬華區', 25.0340, 121.4990],
+  ['信義區', 25.0300, 121.5700], ['士林區', 25.1130, 121.5350], ['北投區', 25.1450, 121.5100],
+  ['內湖區', 25.0830, 121.5900], ['南港區', 25.0450, 121.6200], ['文山區', 24.9890, 121.5650],
+];
+const OUTSIDE_DISTRICT = '台北市外';
 
 /** 射線法：判斷座標是否在多邊形內（poly 為 [lat, lng] 陣列） */
 function pointInPolygon(lat, lng, poly = TAIPEI_OUTLINE) {
@@ -1227,6 +1307,69 @@ function runTests() {
   for (const v of ['--green-text', '--yellow-text', '--red-text', '--gray-text', '--text-2']) {
     const ratio = contrastRatio(css.getPropertyValue(v).trim(), '#FFFFFF');
     cases.push({ name: `對比度 ${v}`, expected: '≥ 4.5', actual: ratio.toFixed(2), ok: ratio >= 4.5 });
+  }
+  // ---- 長按選點偵測器（假時鐘）----
+  {
+    const q = [], trig = [];
+    const det = createLongPressDetector({ ...CONFIG.PICK, onTrigger: (x, y) => trig.push([x, y]),
+      setTimer: (fn, ms) => { q.push({ fn, ms, on: true }); return q.length - 1; }, clearTimer: (i) => { q[i].on = false; } });
+    const fire = () => { q.filter((x) => x.on).forEach((x) => { x.on = false; x.fn(); }); };
+    det.down(1, 100, 100);
+    t('長按：計時 500 ms', q[0].ms, 500);
+    fire();
+    t('長按：按住 500 ms 觸發 1 次', trig.length, 1);
+    t('長按：觸發座標為按下位置', trig[0].join(','), '100,100');
+    trig.length = 0; det.down(2, 50, 50); det.move(2, 50, 61); fire();
+    t('長按：移動 11 px 取消', trig.length, 0);
+    det.down(3, 50, 50); det.move(3, 59, 50); fire();
+    t('長按：移動 9 px 仍觸發', trig.length, 1);
+    trig.length = 0; det.down(4, 0, 0); det.up(4); fire();
+    t('長按：未滿 500 ms 放開不觸發', trig.length, 0);
+    det.down(5, 0, 0); det.down(6, 10, 10); fire();
+    t('長按：第二指按下（縮放）取消', trig.length, 0);
+  }
+  // ---- 行政區判定、監測轉差規則、冷卻 ----
+  t('行政區：大安森林公園 → 大安區', districtOf(25.0297, 121.5363), '大安區');
+  t('行政區：台北101 → 信義區', districtOf(25.0338, 121.5645), '信義區');
+  t('行政區：青年公園 → 萬華區', districtOf(25.0231, 121.5053), '萬華區');
+  t('行政區：台中車站 → 台北市外', districtOf(24.137, 120.687), OUTSIDE_DISTRICT);
+  [['green', 'yellow', true], ['green', 'red', true], ['yellow', 'red', true], ['yellow', 'green', false], ['red', 'yellow', false],
+   ['red', 'red', false], ['green', 'green', false], [null, 'red', false], ['unknown', 'red', false], ['green', 'unknown', false]]
+    .forEach(([a, b, e]) => t(`監測：${a} → ${b} ${e ? '提醒' : '不提醒'}`, shouldNotifyTransition(a, b), e));
+  {
+    const T0 = 1_000_000_000_000, m = { '大安區': T0 };
+    t('冷卻：剛發送剩 60 分鐘', cooldownRemainingMin('大安區', T0, m), 60);
+    t('冷卻：過 1 分鐘剩 59 分鐘', cooldownRemainingMin('大安區', T0 + 60e3, m), 59);
+    t('冷卻：過 59 分 59 秒剩 1 分鐘', cooldownRemainingMin('大安區', T0 + 3599e3, m), 1);
+    t('冷卻：滿 60 分鐘解除', cooldownRemainingMin('大安區', T0 + 3600e3, m), 0);
+    t('冷卻：其他行政區不受影響', cooldownRemainingMin('中山區', T0, m), 0);
+  }
+  // ---- 右鍵 / 地圖選點、市界外、click 取消（Mock 情境才測，避免即時模式發出網路請求）----
+  if (state.data && state.dataMode !== 'live') {
+    const saved = { sel: state.selectedId, focus: state.cardFocus, place: state.searchPlace };
+    const rc = (la, ln) => map.fire('contextmenu', { latlng: window.L.latLng(la, ln), originalEvent: { pointerType: 'mouse', preventDefault() {} } });
+    rc(25.0338, 121.5645);
+    t('右鍵選點：建立選點圖釘', state.searchPlace && state.searchPlace.kind, 'pick');
+    t('右鍵選點：標題「地圖選取位置」', state.searchPlace.name, '地圖選取位置');
+    t('右鍵選點：副標為行政區', state.searchPlace.sub, '信義區');
+    t('右鍵選點：市界內', state.searchPlace.inTaipei, true);
+    rc(25.0267, 121.5435);
+    t('再選一點：畫面只保留 1 個圖釘', document.querySelectorAll('.search-marker').length, 1);
+    selectSearchPlace({ kind: 'search', name: '搜尋地點', sub: '', lat: 25.05, lng: 121.52, inTaipei: true });
+    rc(25.0297, 121.5363);
+    t('選點取代搜尋圖釘：仍只有 1 個', document.querySelectorAll('.search-marker').length, 1);
+    t('選點取代搜尋圖釘：類型為 pick', state.searchPlace.kind, 'pick');
+    t('選點：資訊卡有環境狀態（不是「僅支援台北市」）', infoCardHtml().includes('目前僅支援台北市'), false);
+    rc(24.137, 120.687);
+    t('市界外選點：標示未支援', state.searchPlace.inTaipei, false);
+    t('市界外選點：顯示「目前僅支援台北市」', infoCardHtml().includes('目前僅支援台北市'), true);
+    t('市界外選點：不計算燈號', state.searchEvaluation, null);
+    pickHeld = true; map.fire('click');
+    t('長按放開的 click 不會取消選取', state.searchPlace !== null, true);
+    pickHeld = false; suppressClickUntil = 0; map.fire('click');
+    t('一般點空白處仍取消選取', state.searchPlace, null);
+    t('取消後移除圖釘', document.querySelectorAll('.search-marker').length, 0);
+    state.selectedId = saved.sel; state.cardFocus = saved.focus; state.searchPlace = saved.place; render();
   }
   // 熱力圖與跑點一致：每個跑點位置的熱力圖等級必須等於該跑點 PM2.5 的單項燈號（以目前資料模式的熱力圖檢查）
   if (state.data && heatField) {
@@ -1435,6 +1578,7 @@ const state = {
   searchReading: null,  // 搜尋位置的四項指標（僅台北市內）
   searchEvaluation: null,
   cardFocus: null,      // 資訊卡目前對象：'spot' | 'search' | null（null＝目前位置）
+  monitor: { on: false, perm: 'default', permReason: '', lastStatus: null, msg: '', testMsg: '' }, // 背景監測（預設關閉）
   geoFailed: false,     // 定位失敗（供資訊卡提示「未取得定位」）
   sheetExpanded: false, // 窄螢幕 Bottom Sheet 是否展開
 };
@@ -1551,7 +1695,7 @@ function selectSpot(id, { pan = true } = {}) {
 /** 取消選取：移除搜尋標記，資訊卡回到「目前位置」（Leaflet 拖曳地圖不會觸發 click，不會誤關） */
 function clearSelection() {
   if (state.selectedId === null && !state.searchPlace && state.cardFocus === null) return;
-  const outside = state.searchPlace && !state.searchPlace.inTaipei;
+  const outside = state.searchPlace && !state.searchPlace.inTaipei && state.searchPlace.kind !== 'pick'; // 地圖選點沒有移動地圖，不必飛回
   state.selectedId = null;
   state.searchPlace = null;
   state.cardFocus = null;
@@ -1563,12 +1707,45 @@ function clearSelection() {
 /** 選取搜尋到的地點：平移、放置搜尋標記；台北市內才計算環境狀態 */
 function selectSearchPlace(place) {
   state.searchPlace = place;
+  state.searchReading = null;       // 清掉前一個地點的數值（含已查到的氣象），避免新地點短暫顯示舊資料
+  state.searchEvaluation = null;
+  if (state.data) delete state.data.wx.byKey.search;
   state.selectedId = null;
   state.cardFocus = 'search';
   setSheet(false);
   renderSearchMarker();
-  flyToPoint(place.lat, place.lng, place.inTaipei ? CONFIG.SPOT_ZOOM : CONFIG.DEFAULT_ZOOM);
-  if (place.inTaipei) refreshData(); // 氣象查詢納入搜尋位置（即時模式會多一次 Open-Meteo 請求；Mock 模式不發請求）
+  if (place.kind === 'pick') {
+    // 地圖選點：不移動地圖，除非該點被窄螢幕的 Bottom Sheet 蓋住
+    if (isNarrow() && map.latLngToContainerPoint([place.lat, place.lng]).y > map.getSize().y - SHEET_COLLAPSED_PX - 50) {
+      flyToPoint(place.lat, place.lng, 0, 0.4);
+    }
+  } else {
+    flyToPoint(place.lat, place.lng, place.inTaipei ? CONFIG.SPOT_ZOOM : CONFIG.DEFAULT_ZOOM);
+  }
+  render();
+  if (place.inTaipei) ensureSearchWeather(); // 只替這一點補查氣象，不重抓全部資料
+}
+
+/**
+ * 補查「搜尋 / 選取位置」的氣象，不重新載入全部資料。
+ * - 即時氣象：單點請求 Open-Meteo（失敗則該點氣象顯示「—」並標示部分資料暫缺）。
+ * - Mock：沿用最近跑點的情境值。用序號避免快速連續選點時舊結果蓋掉新結果。
+ */
+let placeWxSeq = 0;
+async function ensureSearchWeather() {
+  const place = state.searchPlace;
+  if (!place || !place.inTaipei || !state.data) return;
+  const pt = { key: 'search', lat: place.lat, lng: place.lng };
+  const seq = ++placeWxSeq;
+  let wx;
+  if (state.data.wx.mode === 'live') {
+    try { wx = (await loadWeatherLive([pt])).byKey.search; } catch (e) { wx = { rain: null, uvi: null, feels: null }; }
+  } else {
+    wx = buildMockWeather(state.data.mode === 'live' ? 'normal' : state.data.mode, [pt]).search;
+  }
+  if (seq !== placeWxSeq || state.searchPlace !== place || !state.data) return;
+  state.data.wx.byKey.search = wx;
+  computeReadings();
   render();
 }
 
@@ -1639,8 +1816,13 @@ function cardHtml({ title, sub, ev, reading, closable, ref }) {
     ${notes.map((n) => `<p class="card-note">${escapeHtml(n)}</p>`).join('')}
     ${ref ? recommendHtml(recommendSpots(ref.lat, ref.lng, status, ref.excludeId)) : ''}
     <p class="card-foot">更新 ${state.data ? formatTaipei(state.data.updatedAt) : '—'}・${escapeHtml(src.label)}</p>
+    ${closable ? '' : `<p class="card-tip">${pickTip()}</p>`}
   </article>`;
 }
+
+/** 地圖選點的操作提示：以主要輸入裝置判斷（觸控 → 長按；滑鼠 → 右鍵），不看螢幕寬度 */
+const isTouchPrimary = () => window.matchMedia('(pointer: coarse)').matches;
+const pickTip = () => (isTouchPrimary() ? '長按地圖任一點，查看當地環境' : '在地圖上按右鍵，查看當地環境');
 
 /** 搜尋到市界外的地點：只顯示訊息，不計算燈號 */
 function outOfScopeCardHtml(place) {
@@ -1676,7 +1858,7 @@ function infoCardHtml() {
                       ev: state.userEvaluation, reading: state.userReading, closable: false,
                       ref: { lat: state.userPos.lat, lng: state.userPos.lng, excludeId: null } });
   }
-  return hint(`點選地圖上的跑點，查看是否適合出發${state.geoFailed ? '<br>（未取得定位，無法顯示目前位置）' : ''}`);
+  return hint(`點選地圖上的跑點，查看是否適合出發${state.geoFailed ? '<br>（未取得定位，無法顯示目前位置）' : ''}<br>${pickTip()}`);
 }
 
 function renderCards() {
@@ -1971,11 +2153,18 @@ function bindUI() {
     const item = e.target.closest('.spot-item');
     if (item) { selectSpot(Number(item.dataset.id)); return; }
     if (e.target.closest('[data-action="clear-selection"]')) { clearSelection(); return; }
+    if (e.target.closest('[data-action="toggle-monitor"]')) { setMonitoring(!state.monitor.on); return; }
+    if (e.target.closest('[data-action="test-notify"]')) { testNotification(); return; }
+    if (e.target.closest('[data-action="clear-cooldown"]')) { clearCooldowns(); state.monitor.testMsg = '已清除冷卻紀錄'; state.monitor.msg = ''; renderMonitor(); return; }
     const modeBtn = e.target.closest('.js-modeseg button[data-mode]');
     if (modeBtn) setDataMode(modeBtn.dataset.mode);
   });
   // 地圖空白處點一下：取消選取
-  map.on('click', () => { clearSelection(); toggleSettings(false); });
+  map.on('click', () => {
+    if (pickHeld || Date.now() < suppressClickUntil) return; // 長按選點放開手指時的 click 不算「點空白處」
+    clearSelection(); toggleSettings(false);
+  });
+  initMapPicking();
   // 窄螢幕：設定選單
   document.getElementById('settingsBtn').addEventListener('click', () => toggleSettings());
   document.addEventListener('click', (e) => {
@@ -2212,8 +2401,293 @@ function initHeatControl() {
 }
 
 /* =====================================================================
-   §9 通知（第 7 階段實作：背景監測、冷卻、橫幅與 Web Notification）
+   §7-3 地圖選點（不使用任何外部服務）
+   - 觸控：長按 500 ms 選點；手指移動超過 10 px、放開、第二指（縮放）都會取消，因此不會與拖曳地圖衝突。
+   - 滑鼠：按右鍵選點；雙擊放大維持 Leaflet 預設。
+   - 「點一下空白處 = 取消選取」維持不變：長按放開後的那一次 click 會被忽略。
+   - iOS Safari：以 CSS（-webkit-touch-callout / user-select）避免長按時跳出系統選單或選取文字。
    ===================================================================== */
+let pickHeld = false;          // 長按已觸發、手指尚未放開
+let suppressClickUntil = 0;    // 放開手指後短時間內忽略 click
+let lastPickAt = 0;
+
+/**
+ * 長按偵測器（純狀態機；計時器可注入，方便在 runTests 用假時鐘測試）。
+ * down → 計時 holdMs 後觸發 onTrigger(x, y)；move 超過 moveTolPx、up、cancel 或第二指按下則取消。
+ */
+function createLongPressDetector({ holdMs, moveTolPx, onTrigger, setTimer = setTimeout, clearTimer = clearTimeout }) {
+  let timer = null, id = null, x0 = 0, y0 = 0;
+  const cancel = () => { if (timer !== null) clearTimer(timer); timer = null; id = null; };
+  return {
+    down(pid, x, y) {
+      if (timer !== null) { cancel(); return; } // 第二指按下（縮放手勢）：取消
+      id = pid; x0 = x; y0 = y;
+      timer = setTimer(() => { const px = x0, py = y0; timer = null; id = null; onTrigger(px, py); }, holdMs);
+    },
+    move(pid, x, y) { if (timer !== null && pid === id && Math.hypot(x - x0, y - y0) > moveTolPx) cancel(); },
+    up(pid) { if (pid === id) cancel(); },
+    cancel,
+    isPending: () => timer !== null,
+  };
+}
+
+/** 建立「地圖選取位置」：台北市界內以最近行政區中心點標示行政區；市界外只給座標 */
+function buildPickPlace(lat, lng) {
+  const inTaipei = pointInPolygon(lat, lng);
+  return {
+    kind: 'pick', name: '地圖選取位置', lat, lng, inTaipei,
+    sub: inTaipei ? districtOf(lat, lng) : `座標 ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+  };
+}
+
+/** 在指定座標選點：取代目前的搜尋 / 選點圖釘（畫面上只保留一個暫時圖釘） */
+function pickAt(latlng) {
+  lastPickAt = Date.now();
+  // 只在有使用者操作紀錄時震動（否則 Chrome 會在 Console 印出 Intervention 警告）
+  try { if (navigator.vibrate && navigator.userActivation && navigator.userActivation.isActive) navigator.vibrate(15); } catch (e) { /* 不支援震動就略過 */ }
+  selectSearchPlace(buildPickPlace(latlng.lat, latlng.lng));
+}
+
+function initMapPicking() {
+  const el = map.getContainer();
+  const skip = (t) => t.closest && t.closest('.leaflet-control, .leaflet-marker-icon, .leaflet-popup, .leaflet-tooltip');
+  const detector = createLongPressDetector({
+    ...CONFIG.PICK,
+    onTrigger: (x, y) => {
+      const r = el.getBoundingClientRect();
+      pickHeld = true;
+      pickAt(map.containerPointToLatLng([x - r.left, y - r.top]));
+    },
+  });
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || skip(e.target)) return; // 滑鼠走右鍵
+    detector.down(e.pointerId, e.clientX, e.clientY);
+  });
+  el.addEventListener('pointermove', (e) => detector.move(e.pointerId, e.clientX, e.clientY));
+  const release = (e) => {
+    detector.up(e.pointerId);
+    if (pickHeld) { pickHeld = false; suppressClickUntil = Date.now() + 600; }
+  };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  map.on('movestart zoomstart', () => detector.cancel()); // 地圖開始移動 / 縮放：取消
+  // 觸控長按在部分瀏覽器（Android）會跳出系統內容選單，擋掉
+  el.addEventListener('contextmenu', (e) => { if (e.pointerType !== 'mouse') e.preventDefault(); });
+  // 右鍵（滑鼠）選點；觸控長按已由偵測器處理，這裡略過避免重複
+  map.on('contextmenu', (e) => {
+    const oe = e.originalEvent;
+    if (oe && oe.pointerType && oe.pointerType !== 'mouse') return;
+    if (oe && oe.preventDefault) oe.preventDefault();
+    if (!(oe && oe.pointerType) && Date.now() - lastPickAt < 800) return; // 沒有 pointerType 的舊式事件才需要防重複
+    pickAt(e.latlng);
+  });
+}
+
+/* =====================================================================
+   §9 背景監測與通知
+   - 預設關閉；開啟時請求通知權限（被拒絕或不支援 → 只顯示頁面內橫幅，並說明原因）。
+   - 每 10 分鐘隨資料更新檢查一次「目前位置」的燈號：綠→黃/紅、黃→紅 時提醒（系統通知＋可關閉的橫幅，
+     內容含狀態、主因與建議）。第一次檢查只記錄基準，不提醒。
+   - 同一行政區 60 分鐘內不重複提醒；冷卻紀錄存在 localStorage（try/catch，不可用時退回記憶體）。
+   - 限制：純網頁在分頁 / App 被關閉後無法執行，所以只能在頁面開著（可在背景分頁）時監測。
+   ===================================================================== */
+const COOLDOWN_KEY = 'safeair.cooldown.v1';
+let memCooldowns = {};
+
+function loadCooldowns() {
+  try {
+    const raw = localStorage.getItem(COOLDOWN_KEY);
+    if (raw) { const o = JSON.parse(raw); if (o && typeof o === 'object') memCooldowns = o; }
+  } catch (e) { /* 無痕模式 / 停用儲存：只用記憶體 */ }
+  return memCooldowns;
+}
+function saveCooldowns() { try { localStorage.setItem(COOLDOWN_KEY, JSON.stringify(memCooldowns)); } catch (e) { /* 略過 */ } }
+
+/** 冷卻剩餘分鐘數（向上取整；0 = 可提醒）。可傳入 map / now 方便測試 */
+function cooldownRemainingMin(district, now = Date.now(), map = loadCooldowns()) {
+  const last = Number(map[district]);
+  if (!Number.isFinite(last)) return 0;
+  const rem = last + CONFIG.MONITOR.cooldownMin * 60000 - now;
+  return rem > 0 ? Math.ceil(rem / 60000) : 0;
+}
+function markCooldown(district, now = Date.now()) { loadCooldowns(); memCooldowns[district] = now; saveCooldowns(); }
+function clearCooldowns() { memCooldowns = {}; try { localStorage.removeItem(COOLDOWN_KEY); } catch (e) { /* 略過 */ } }
+
+/** 是否為「轉差」：綠→黃/紅、黃→紅。資料不足或沒有基準一律不提醒 */
+function shouldNotifyTransition(prev, next) {
+  return (prev === 'green' && (next === 'yellow' || next === 'red')) || (prev === 'yellow' && next === 'red');
+}
+
+/** 主因文字，例如「PM2.5 23.7 μg/m³」「體感溫度（偏熱） 33.5 °C」 */
+function describeCause(ev, reading) {
+  if (!ev || !ev.primary) return '各項指標良好';
+  const ind = INDICATORS.find((i) => i.key === ev.primary.key);
+  const label = ind.key === 'feels' ? `${ind.label}（${ev.primary.direction === 'cold' ? '偏冷' : '偏熱'}）` : ind.label;
+  const v = reading ? reading[ind.key] : null;
+  return `${label} ${fmtVal(v, ind.digits)}${v === null || v === undefined ? '' : ` ${ind.unit}`}`;
+}
+
+/** 監測對象：目前位置（需已定位且有判定結果） */
+function monitorSubject() {
+  if (!state.userPos || !state.userEvaluation) return null;
+  return { district: districtOf(state.userPos.lat, state.userPos.lng), ev: state.userEvaluation, reading: state.userReading };
+}
+
+/** 系統通知是否可用（不含權限） */
+function notifySupport() {
+  if (typeof Notification === 'undefined') return { ok: false, reason: '此瀏覽器不支援系統通知' };
+  if (!window.isSecureContext) return { ok: false, reason: '此網址不是 HTTPS 或 localhost，瀏覽器不提供系統通知' };
+  return { ok: true, reason: '' };
+}
+
+/** 請求通知權限（必須在使用者點擊的處理函式內呼叫） */
+async function ensurePermission() {
+  const sup = notifySupport();
+  if (!sup.ok) return { perm: 'unsupported', reason: sup.reason };
+  let perm = Notification.permission;
+  if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch (e) { perm = 'default'; } }
+  const reason = perm === 'denied' ? '通知權限被拒絕（可在瀏覽器的網站設定中重新開啟）' : perm === 'default' ? '尚未允許通知' : '';
+  return { perm, reason };
+}
+
+let swPromise = null;
+/** 取得 Service Worker（sw.js）。手機瀏覽器（Android Chrome）只允許經由它顯示通知；file:// 無法註冊 */
+function getSwRegistration() {
+  if (!swPromise) {
+    swPromise = navigator.serviceWorker.register('sw.js')
+      .then(() => Promise.race([navigator.serviceWorker.ready, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))]));
+  }
+  return swPromise;
+}
+
+/** 發送系統通知：優先 Service Worker（手機），退而用 new Notification（電腦）。回傳 { ok, reason } */
+async function sendSystemNotification(title, body, tag) {
+  const sup = notifySupport();
+  if (!sup.ok) return { ok: false, reason: sup.reason };
+  if (Notification.permission !== 'granted') {
+    return { ok: false, reason: Notification.permission === 'denied' ? '通知權限被拒絕' : '尚未允許通知' };
+  }
+  const opts = { body, tag, lang: 'zh-TW' };
+  if ('serviceWorker' in navigator) {
+    try { const reg = await getSwRegistration(); await reg.showNotification(title, opts); return { ok: true }; }
+    catch (e) { swPromise = null; /* 註冊失敗（例如 file://）：改用頁面直接通知 */ }
+  }
+  try { new Notification(title, opts); return { ok: true }; } // eslint-disable-line no-new
+  catch (e) { return { ok: false, reason: '此瀏覽器無法由網頁直接發送通知' }; }
+}
+
+/** 頁面內橫幅（可關閉，最多同時 3 則） */
+function showAlertBanner({ status, title, body, note }) {
+  const box = document.getElementById('alerts');
+  const meta = STATUS_META[status] || STATUS_META.unknown;
+  const el = document.createElement('div');
+  el.className = `alert ${meta.cls}`;
+  el.setAttribute('role', status === 'red' ? 'alert' : 'status');
+  el.innerHTML = `<span class="status-dot">${iconSvg(meta.icon)}</span>
+    <div class="alert-body"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(body)}</p>${note ? `<p class="alert-note">${escapeHtml(note)}</p>` : ''}</div>
+    <button type="button" class="alert-close" aria-label="關閉提醒">${iconSvg('i-x')}</button>`;
+  el.querySelector('.alert-close').addEventListener('click', () => el.remove());
+  box.prepend(el);
+  while (box.children.length > 3) box.lastChild.remove();
+}
+
+/** 發出提醒：系統通知＋橫幅，並記錄該行政區的冷卻起點 */
+async function dispatchAlert({ district, ev, reading, test }) {
+  const meta = STATUS_META[ev.status];
+  const title = `${test ? '【測試】' : ''}${district}：${meta.label}`;
+  const body = ev.primary ? `${describeCause(ev, reading)}。${adviceFor(ev)}` : adviceFor(ev); // 全綠時沒有主因，只顯示建議
+  markCooldown(district);
+  const res = await sendSystemNotification(title, body, `safeair-${district}`);
+  showAlertBanner({ status: ev.status, title, body, note: res.ok ? '' : `未發送系統通知（${res.reason}），改以頁面橫幅提醒` });
+  return res;
+}
+
+/** 每次資料更新後檢查（監測開啟時）：比較目前位置燈號與上一次 */
+function monitorCheck() {
+  const m = state.monitor;
+  if (!m.on) return;
+  const subj = monitorSubject();
+  if (!subj || subj.ev.status === 'unknown') { renderMonitor(); return; }
+  const prev = m.lastStatus, next = subj.ev.status;
+  m.lastStatus = next;
+  if (shouldNotifyTransition(prev, next)) {
+    const rem = cooldownRemainingMin(subj.district);
+    if (rem > 0) m.msg = `${subj.district} 燈號轉差（${STATUS_META[prev].label}→${STATUS_META[next].label}），冷卻中（剩 ${rem} 分鐘），未重複提醒`;
+    else { m.msg = ''; dispatchAlert({ district: subj.district, ev: subj.ev, reading: subj.reading, test: false }); }
+  }
+  renderMonitor();
+}
+
+/** 開啟 / 關閉背景監測（開啟需在點擊事件內，才能彈出權限詢問） */
+async function setMonitoring(on) {
+  const m = state.monitor;
+  m.msg = ''; m.testMsg = '';
+  if (!on) { m.on = false; m.lastStatus = null; renderMonitor(); return; }
+  m.on = true;
+  const p = ensurePermission(); // 同步呼叫，保持在使用者手勢內
+  renderMonitor();
+  const { perm, reason } = await p;
+  m.perm = perm; m.permReason = reason;
+  const subj = monitorSubject();
+  m.lastStatus = subj && subj.ev.status !== 'unknown' ? subj.ev.status : null; // 以目前燈號為基準，不立刻提醒
+  renderMonitor();
+}
+
+/** 「立即測試通知」：遵守冷卻；沒有定位時以選取的跑點（或第一個跑點）示範 */
+async function testNotification() {
+  const m = state.monitor;
+  let subj = monitorSubject();
+  if (!subj) {
+    const spot = RUN_SPOTS.find((x) => x.id === state.selectedId) || RUN_SPOTS[0];
+    const ev = state.evaluations[spot.id];
+    if (!ev) { m.testMsg = '資料載入中，請稍後再試'; renderMonitor(); return; }
+    subj = { district: spot.district, ev, reading: state.readings[spot.id] };
+  }
+  const rem = cooldownRemainingMin(subj.district);
+  if (rem > 0) { m.testMsg = `冷卻中，剩 ${rem} 分鐘`; renderMonitor(); return; }
+  if (notifySupport().ok && Notification.permission === 'default') {
+    const p = await ensurePermission();
+    m.perm = p.perm; m.permReason = p.reason;
+  }
+  const res = await dispatchAlert({ district: subj.district, ev: subj.ev, reading: subj.reading, test: true });
+  m.testMsg = res.ok ? `已送出測試通知（${subj.district} 冷卻 ${CONFIG.MONITOR.cooldownMin} 分鐘）` : `已顯示橫幅（${res.reason}）`;
+  renderMonitor();
+}
+
+/** 監測區塊（側邊欄與窄螢幕設定選單各一份） */
+function renderMonitor() {
+  const m = state.monitor;
+  const subj = monitorSubject();
+  let status;
+  if (!m.on) status = '已關閉';
+  else if (!state.userPos) status = '需定位才能監測';
+  else {
+    const next = state.data ? formatTaipei(new Date(state.data.updatedAt.getTime() + CONFIG.REFRESH_MS)) : '—';
+    status = `監測中・每 10 分鐘檢查・${subj ? `${subj.district}目前${STATUS_META[subj.ev.status].label}` : '等待資料'}・下次約 ${next}`;
+  }
+  let permNote = '';
+  if (m.on && m.perm === 'granted') permNote = '系統通知已啟用';
+  else if (m.on && m.perm !== 'default') permNote = `${m.permReason || '無法使用系統通知'}，將只顯示頁面橫幅`;
+  const html = `
+    <div class="mon-row"><span class="field-label" id="monLabel">背景監測</span>
+      <button type="button" class="switch" role="switch" aria-checked="${m.on}" aria-labelledby="monLabel" data-action="toggle-monitor"></button></div>
+    <p class="mon-status">${escapeHtml(status)}</p>
+    ${permNote ? `<p class="mon-note">${escapeHtml(permNote)}</p>` : ''}
+    ${m.msg ? `<p class="mon-note">${escapeHtml(m.msg)}</p>` : ''}
+    <p class="mon-note">頁面關閉後無法監測，請保持頁面開啟（可切到背景）。</p>
+    <div class="mon-actions"><button type="button" class="btn" data-action="test-notify">立即測試通知</button>
+      <button type="button" class="link-btn" data-action="clear-cooldown">清除冷卻紀錄</button></div>
+    <p class="mon-msg" role="status">${escapeHtml(m.testMsg)}</p>`;
+  const active = document.activeElement;
+  const act = active && active.dataset ? active.dataset.action : null;
+  const idx = act ? [...document.querySelectorAll('.js-monitor')].findIndex((c) => c.contains(active)) : -1;
+  document.querySelectorAll('.js-monitor').forEach((c) => { c.innerHTML = html; });
+  if (act && idx >= 0) { // 重繪後把焦點還給同一個按鈕
+    const target = document.querySelectorAll('.js-monitor')[idx].querySelector(`[data-action="${act}"]`);
+    if (target) target.focus();
+  }
+}
+
 
 /* =====================================================================
    §10 啟動
@@ -2236,8 +2710,8 @@ function bootstrap() {
   renderModeSwitch();
   render();
   locateUser({ recenter: true });
-  refreshData();
-  setInterval(refreshData, CONFIG.REFRESH_MS); // 每 10 分鐘自動更新
+  renderMonitor();
+  refreshData(); // 完成後自動排定每 10 分鐘更新
 }
 
 // 對外提供除錯 / 測試介面（之後階段會加入 evaluate、runTests 等）
@@ -2245,7 +2719,7 @@ window.SafeAir = {
   RUN_SPOTS, CONFIG, PM25_SOURCES, state, haversine, selectSpot,
   idwEstimate, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
-  pointInPolygon, TAIPEI_OUTLINE, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, heatValueAt, heatPixelAt, buildHeatField,
+  pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, heatValueAt, heatPixelAt, buildHeatField,
 };
 
 bootstrap();
