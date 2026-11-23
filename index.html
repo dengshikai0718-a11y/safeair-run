@@ -231,7 +231,28 @@ button { font: inherit; color: inherit; }
   font: 600 14px/1 var(--font); cursor: pointer;
 }
 .heat-btn:hover { background: var(--hover); }
-.heat-btn[aria-pressed="true"] { background: var(--text); color: #fff; }
+.heat-btn:not([data-layer="off"]) { background: var(--text); color: #fff; }
+.layer-menu { position: absolute; top: calc(var(--touch) + 6px); right: 0; z-index: 2; min-width: 168px; padding: 6px; background: var(--surface);
+              border-radius: var(--radius); box-shadow: var(--shadow); display: grid; gap: 2px; }
+.layer-menu[hidden] { display: none; }
+.layer-menu button { display: flex; align-items: center; gap: 10px; min-height: var(--touch); padding: 0 12px; border: 0; border-radius: 8px;
+                     background: transparent; font: 15px var(--font); color: var(--text); text-align: left; cursor: pointer; }
+.layer-menu button:hover { background: var(--hover); }
+.layer-menu button::before { content: ""; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--text-2); flex: none; }
+.layer-menu button[aria-checked="true"] { font-weight: 700; }
+.layer-menu button[aria-checked="true"]::before { border-color: var(--text); background: radial-gradient(var(--text) 0 4px, transparent 5px); }
+.heat-legend .msg { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* 降雨時間滑桿：寬螢幕在地圖下方中央；窄螢幕在 Bottom Sheet 上方 */
+.rain-bar { position: absolute; z-index: 1000; left: 50%; transform: translateX(-50%); bottom: 44px; width: min(460px, calc(100% - 200px));
+            padding: 10px 14px 8px; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); font-size: 13px; }
+.rain-bar[hidden] { display: none; }
+.rain-bar .rb-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.rain-bar .rb-label { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rain-bar input[type="range"] { width: 100%; height: var(--touch); margin: 0; accent-color: #2563EB; cursor: pointer; }
+.rain-bar .rb-ticks { display: flex; justify-content: space-between; margin-top: -8px; font-size: 11px; color: var(--text-2); }
+.rain-bar .rb-note { margin: 6px 0 0; font-size: 12px; color: var(--text-2); line-height: 1.4; }
+.rain-bar .rb-msg { margin: 0; font-size: 14px; font-weight: 600; }
 .heat-legend {
   width: 232px; padding: 12px 14px; background: var(--surface); border-radius: var(--radius);
   box-shadow: var(--shadow); font-size: 13px; color: var(--text);
@@ -258,6 +279,9 @@ button { font: inherit; color: inherit; }
   .heat-legend .lg-full { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 232px; padding: 12px 14px;
                           background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); }
   .heat-legend.expanded .lg-full { display: block; }
+  .layer-menu { top: calc(var(--touch) + 6px); }
+  .rain-bar { left: 12px; right: 72px; width: auto; transform: none; bottom: calc(var(--sheet-offset) + 44px); } /* 版權文字在窄螢幕會折成兩行，滑桿需再往上避開 */
+  body.sheet-open .rain-bar { display: none; } /* Sheet 展開時地圖被蓋住，隱藏滑桿 */
 }
 
 /* =====================================================================
@@ -544,11 +568,19 @@ button { font: inherit; color: inherit; }
     <div id="alerts"></div>
     <!-- 熱力圖開關與圖例（§11） -->
     <div id="heatCtl">
-      <button type="button" id="heatBtn" class="heat-btn" aria-pressed="false" aria-controls="heatLegend" aria-label="PM2.5 熱力圖" title="PM2.5 熱力圖">
-        <svg class="icon"><use href="#i-layers"/></svg><span class="label">PM2.5 熱力圖</span>
+      <button type="button" id="heatBtn" class="heat-btn" data-layer="off" aria-haspopup="menu" aria-expanded="false" aria-controls="layerMenu"
+              aria-label="地圖圖層：關閉（點擊切換）" title="地圖圖層">
+        <svg class="icon"><use href="#i-layers"/></svg><span class="label" id="heatBtnLabel">圖層</span>
       </button>
+      <div id="layerMenu" class="layer-menu" role="menu" aria-label="地圖圖層" hidden>
+        <button type="button" role="menuitemradio" aria-checked="false" data-layer="pm25">PM2.5</button>
+        <button type="button" role="menuitemradio" aria-checked="false" data-layer="rain">降雨機率</button>
+        <button type="button" role="menuitemradio" aria-checked="true" data-layer="off">關閉</button>
+      </div>
       <div id="heatLegend" class="heat-legend" hidden></div>
     </div>
+    <!-- 降雨時間滑桿（只在「降雨機率」圖層出現；只改變降雨熱力圖，跑點燈號與資訊卡仍依目前狀況） -->
+    <div id="rainBar" class="rain-bar" hidden></div>
     <!-- Bottom Sheet（窄螢幕）：收合 140px / 展開 80vh -->
     <section id="sheet" aria-label="環境狀態">
       <button type="button" id="sheetHandle" class="sheet-handle" aria-expanded="false" aria-controls="sheetBody" aria-label="展開詳細資訊"></button>
@@ -616,6 +648,10 @@ const CONFIG = {
   // IDW 採用的測站範圍：台北範圍框向外約 10 km（納入基隆、淡水、林口、樹林等站，改善市界邊緣的估算）
   STATION_BBOX: { minLng: 121.35, maxLng: 121.77, minLat: 24.87, maxLat: 25.30 },
   HEAT: { cellM: 75, opacity: 0.35, hatchOpacity: 0.8 }, // 熱力圖：75 m 細格、色塊透明度 0.35、斜線透明度 0.8
+  // 降雨機率圖層：資料由 GitHub Actions 預先向 Open-Meteo 查詢網格點並存成 data/rain.json（瀏覽器不自行查詢，避免 429）。
+  // grid 與 tools/fetch_rain.py 共用（腳本會從這裡讀取，請勿改成多行）；Mock 情境也用同一組網格。
+  RAIN: { url: 'data/rain.json', maxAgeH: 3, slots: 13, hours: 15,
+          grid: { lat0: 24.945, lng0: 121.445, dLat: 0.0135, dLng: 0.0149, rows: 22, cols: 17 } },
   TAIPEI_UTC_OFFSET_H: 8,    // 台灣無日光節約時間，固定 UTC+8
   // 地點搜尋（地理編碼）：OpenStreetMap Nominatim 公用服務。使用條款重點（2026-11 查證）：
   // 每秒最多 1 次請求、須能辨識應用程式（瀏覽器會帶 Referer）、不得做自動完成、只能由使用者按下搜尋時觸發。
@@ -630,7 +666,8 @@ const CONFIG = {
   TILE_BASE: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}{r}.png?key={key}',
   TILE_LABELS: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_only_labels/{z}/{x}/{y}{r}.png?key={key}',
   ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者 &copy; <a href="https://carto.com/attributions">CARTO</a>'
-    + '｜PM2.5：<a href="https://data.moenv.gov.tw/dataset/detail/AQX_P_432">環境部環境資料開放平臺</a>',
+    + '｜PM2.5：<a href="https://data.moenv.gov.tw/dataset/detail/AQX_P_432">環境部環境資料開放平臺</a>'
+    + '｜降雨：<a href="https://open-meteo.com/">Open-Meteo</a>',
 };
 
 /* ---------------------------------------------------------------------
@@ -1141,6 +1178,7 @@ async function refreshData() {
   state.data = { mode, pm, wx, updatedAt: new Date() };
   computeReadings();
   updateHeatmap(); // 熱力圖只在資料更新時重算
+  if (layerMode === 'rain') refreshRain(); // 降雨圖層：隨資料更新重新載入（即時：重讀 rain.json；Mock：換成對應情境）
   render();
   monitorCheck();   // 背景監測：隨每次資料更新檢查燈號是否轉差
   scheduleRefresh();
@@ -1184,6 +1222,7 @@ function getSourceStatus() {
     ? `PM2.5：即時資料（${d.pm.sourceName}，${d.pm.stations.length} 站，${formatTaipei(d.pm.dataTime)} 資料）`
     : `PM2.5：${d.pm.reasons.join('；')}，目前為展示數據`);
   if (d.pm.mode === 'live' && d.pm.credit) reasons.push(d.pm.credit);
+  reasons.push('降雨：Open-Meteo（open-meteo.com）氣象預報，CC BY 4.0');
   reasons.push(d.wx.mode === 'live'
     ? `氣象：即時資料（Open-Meteo，${d.wx.hourKey.slice(11)} 整點預報）`
     : `氣象：${d.wx.reasons.join('；')}，目前為展示數據`);
@@ -1485,6 +1524,107 @@ function runTests() {
     t('門檻：5.1 km 標示附近無測站', at(5.1).nearby, false);
     t('門檻：7.9 km 熱力圖仍上色', at(7.9).heatBlank, false);
     t('門檻：8.1 km 熱力圖留白', at(8.1).heatBlank, true);
+  }
+  // ---- 降雨機率圖層 ----
+  {
+    const R = CONFIG.RAIN, g = R.grid;
+    t('降雨配色：0% 為低', rainLevel(0), 'low');
+    t('降雨配色：30% 為低', rainLevel(30), 'low');
+    t('降雨配色：31% 為中', rainLevel(31), 'mid');
+    t('降雨配色：60% 為中', rainLevel(60), 'mid');
+    t('降雨配色：61% 為高', rainLevel(61), 'high');
+    t('降雨配色：100% 為高', rainLevel(100), 'high');
+    t('降雨配色：缺值為 null', rainLevel(null), null);
+    t('降雨配色：全為藍色系（不含綠黃紅）', Object.values(RAIN_COLORS).every(([r, gg, b]) => b > r && b > gg), true);
+    // rain.json 解析、過期與讀取失敗
+    const empty = () => Array(g.rows * g.cols).fill(null);
+    const hrs = (from) => Array.from({ length: R.hours }, (_, n) => hourKeyShift(from, n));
+    const file = (fetchedAt, from, extra = {}) => ({ grid: g, fetchedAt, hours: hrs(from), values: empty(), ...extra });
+    const now = new Date('2026-11-24T15:20:00+08:00');
+    const fresh = parseRain(file('2026-11-24T06:45:00Z', '2026-11-24T14:00'), now);
+    t('rain.json：1 小時內的檔案有效', fresh.ok, true);
+    t('rain.json：「現在」對應到第 2 個整點（startIdx = 1）', fresh.startIdx, 1);
+    t('rain.json：時段數最多 13（現在 + 12 小時）', fresh.slots, 13);
+    t('rain.json：產生後 2 個整點內，時段數仍為 13（多存 2 個緩衝時段）', parseRain(file('2026-11-24T05:45:00Z', '2026-11-24T13:00'), now).slots, 13);
+    t('rain.json：更舊的檔案仍有效但時段數減少（12）', parseRain(file('2026-11-24T04:45:00Z', '2026-11-24T12:00'), now).slots, 12);
+    t('rain.json：超過 3 小時視為過期', parseRain(file('2026-11-24T03:45:00Z', '2026-11-24T11:00'), now).reason, 'stale');
+    t('rain.json：剛好 3 小時內仍有效', parseRain(file('2026-11-24T04:21:00Z', '2026-11-24T12:00'), now).ok, true);
+    t('rain.json：格式錯誤', parseRain({}).reason, 'format');
+    t('rain.json：values 長度不符', parseRain(file('2026-11-24T06:45:00Z', '2026-11-24T14:00', { values: [] }), now).reason, 'format');
+    t('rain.json：時間不可解析', parseRain(file('壞掉', '2026-11-24T14:00'), now).reason, 'format');
+    t('讀取失敗：顯示為無法取得', rainStateFrom(null, { code: 'network' }).status, 'unavailable');
+    t('讀取逾時：顯示為無法取得', rainStateFrom(null, { code: 'timeout' }).reason, 'timeout');
+    t('過期檔案：顯示為無法取得', rainStateFrom(file('2026-11-24T03:45:00Z', '2026-11-24T11:00'), null, now).status, 'unavailable');
+    t('有效檔案：圖層可用', rainStateFrom(file('2026-11-24T06:45:00Z', '2026-11-24T14:00'), null, now).status, 'ok');
+    t('降雨預報無法取得文字', RAIN_UNAVAILABLE, '降雨預報暫時無法取得');
+    // Mock 降雨網格
+    const val = (m, lat, lng, i) => rainInterp(m.grid, m.values, i, lat, lng);
+    const spotsAt = (m, i) => RUN_SPOTS.map((sp) => val(m, sp.lat, sp.lng, i));
+    const storm = buildMockRain('storm'), normal = buildMockRain('normal'), pol = buildMockRain('pollution');
+    t('Mock 降雨：13 個時段可用', storm.slots, 13);
+    t('Mock 降雨：網格與設定相同', storm.grid, g);
+    const dj = RUN_SPOTS.find((x) => x.id === 2), hb = RUN_SPOTS.find((x) => x.id === 4);
+    t('大雨曝曬：大佳 > 60%', val(storm, dj.lat, dj.lng, 0) > 60, true);
+    t('大雨曝曬：花博 > 60%', val(storm, hb.lat, hb.lng, 0) > 60, true);
+    t('大雨曝曬：其餘三個跑點 ≤ 30%', RUN_SPOTS.filter((x) => x.id !== 2 && x.id !== 4).every((x) => val(storm, x.lat, x.lng, 0) <= 30), true);
+    const series = Array.from({ length: 13 }, (_, i) => val(storm, dj.lat, dj.lng, i));
+    t('大雨曝曬：大佳降雨逐時減弱', series.every((v, i) => i === 0 || v <= series[i - 1]), true);
+    t('大雨曝曬：+12 小時降到 30% 以下', series[12] <= 30, true);
+    t('大雨曝曬：滑桿有變化（現在與 +12 小時不同級）', rainLevel(series[0]) !== rainLevel(series[12]), true);
+    t('正常：現在大致低降雨（全部節點 ≤ 30%）', normal.values.every((v) => v[0] <= 30), true);
+    t('高空汙：全時段低降雨（全部節點 ≤ 30%）', pol.values.every((v) => v.every((x) => x <= 30)), true);
+    for (const sc of ['normal', 'pollution', 'storm']) {
+      const wx = buildMockWeather(sc, RUN_SPOTS.map((sp) => ({ key: `spot-${sp.id}`, spotId: sp.id, lat: sp.lat, lng: sp.lng })));
+      const m = buildMockRain(sc);
+      t(`Mock 降雨與跑點降雨一致（${sc}）`, RUN_SPOTS.every((sp, i) => rainLevel(spotsAt(m, 0)[i]) === rainLevel(wx[`spot-${sp.id}`].rain)), true);
+    }
+    // 圖層三選一、圖例、時間滑桿（Mock 情境才測；不發請求）
+    if (state.dataMode !== 'live') {
+      const prev = { layer: layerMode, slot: state.rainSlot, rain: state.rain };
+      const q = (sel) => document.querySelector(sel);
+      const checked = () => [...document.querySelectorAll('#layerMenu [data-layer]')].filter((e) => e.getAttribute('aria-checked') === 'true').map((e) => e.dataset.layer);
+      try {
+        setLayer('off');
+        t('圖層：關閉時按鈕顯示「圖層」', q('#heatBtnLabel').textContent, '圖層');
+        t('圖層：關閉時沒有圖例與滑桿', q('#heatLegend').hidden && q('#rainBar').hidden, true);
+        t('圖層：關閉時地圖上沒有任何熱力圖', !map.hasLayer(heatGroup) && !(rainImg && map.hasLayer(rainImg)), true);
+        setLayer('pm25');
+        t('圖層：PM2.5 → 按鈕顯示「PM2.5」', q('#heatBtnLabel').textContent, 'PM2.5');
+        t('圖層：PM2.5 圖層在地圖上', map.hasLayer(heatGroup), true);
+        t('圖層：PM2.5 圖例標題', q('#heatLegend .lg-full h3').textContent.startsWith('PM2.5 推估'), true);
+        t('圖層：PM2.5 沒有時間滑桿', q('#rainBar').hidden, true);
+        setLayer('rain');
+        t('圖層：降雨 → 按鈕顯示「降雨機率」', q('#heatBtnLabel').textContent, '降雨機率');
+        t('圖層：三選一（切到降雨會移除 PM2.5）', map.hasLayer(heatGroup) === false && !!rainImg && map.hasLayer(rainImg), true);
+        t('圖層：選單只有一個選中項', checked().join(), 'rain');
+        t('圖例：降雨圖例標題', q('#heatLegend .lg-full h3').textContent, '降雨機率（%）');
+        t('圖例：降雨圖例有三級門檻', q('#heatLegend .lg-full').textContent.includes('≤ 30%') && q('#heatLegend .lg-full').textContent.includes('31–60%') && q('#heatLegend .lg-full').textContent.includes('> 60%'), true);
+        t('圖例：降雨圖例註明資料來源與解析度', q('#heatLegend .lg-full .note').textContent.includes('Open-Meteo') && q('#heatLegend .lg-full .note').textContent.includes('27 km'), true);
+        t('滑桿：降雨圖層出現', q('#rainBar').hidden, false);
+        t('滑桿：範圍 0 到 +12（13 個時段）', q('#rainSlider').min + '-' + q('#rainSlider').max, '0-12');
+        t('滑桿：現在的文字', /^現在｜\d\d:00$/.test(q('#rainSlotLabel').textContent), true);
+        t('滑桿：註明「僅顯示降雨預報，跑點燈號為目前狀況」', q('#rainBar').textContent.includes('僅顯示降雨預報，跑點燈號為目前狀況'), true);
+        const sl = q('#rainSlider'); sl.value = '3'; sl.dispatchEvent(new Event('input', { bubbles: true }));
+        t('滑桿：+3 小時的文字', /^\+3 小時｜\d\d:00$/.test(q('#rainSlotLabel').textContent), true);
+        t('滑桿：時段會記住', state.rainSlot, 3);
+        t('滑桿：只改變降雨圖層，跑點燈號不變', RUN_SPOTS.every((sp) => getSpotStatus(sp.id) === STATUS_META[state.evaluations[sp.id].status] ? true : getSpotStatus(sp.id) === state.evaluations[sp.id].status), true);
+        // 資料無法取得
+        const keep = state.rain;
+        state.rain = { status: 'unavailable', source: 'live', reason: 'stale' }; renderRainUi();
+        t('無法取得：滑桿區顯示「降雨預報暫時無法取得」', q('#rainBar').textContent.includes('降雨預報暫時無法取得') && !q('#rainSlider'), true);
+        t('無法取得：圖例也顯示提示', q('#heatLegend .lg-full').textContent.includes('降雨預報暫時無法取得'), true);
+        state.rain = keep; renderRainUi();
+        setLayer('pm25');
+        t('圖層：切回 PM2.5 → 降雨圖層與滑桿隱藏', !(rainImg && map.hasLayer(rainImg)) && q('#rainBar').hidden && map.hasLayer(heatGroup), true);
+        setLayer('off');
+        t('圖層：切到關閉 → 全部移除', !map.hasLayer(heatGroup) && !(rainImg && map.hasLayer(rainImg)) && q('#rainBar').hidden && q('#heatLegend').hidden, true);
+        t('Mock 情境不讀 rain.json', performance.getEntriesByType('resource').some((e) => e.name.includes('rain.json')), false);
+        t('版權文字含「降雨：Open-Meteo」', document.querySelector('.leaflet-control-attribution').textContent.includes('降雨：Open-Meteo'), true);
+      } finally {
+        state.rain = prev.rain; state.rainSlot = prev.slot;
+        setLayer(prev.layer);
+      }
+    }
   }
   // ---- 我的最愛：資料層（用假的儲存空間，不會動到真正的最愛）----
   {
@@ -1906,6 +2046,8 @@ const state = {
   data: null,           // { mode, pm, wx, updatedAt }：最近一次載入的原始資料
   readings: {},         // spotId → { pm25, pmEstimate, rain, uvi, feels }
   userReading: null,    // 使用者目前位置的四項指標
+  rain: null,           // 降雨圖層資料 { status: 'loading'|'ok'|'unavailable', source: 'live'|'mock', grid, hours, values, startIdx, slots, reason }
+  rainSlot: 0,          // 降雨時間滑桿目前的時段（0＝現在）
   searchPlace: null,    // 搜尋到的地點 { name, sub, lat, lng, inTaipei }
   searchReading: null,  // 搜尋位置的四項指標（僅台北市內）
   searchEvaluation: null,
@@ -2651,7 +2793,6 @@ const HEAT_LEGEND = [
 let heatGroup = null;   // L.layerGroup：色塊圖層 + 無資料斜線圖層（一起開關）
 let heatImg = null;     // 色塊 imageOverlay
 let hatchImg = null;    // 無資料斜線 imageOverlay
-let heatOn = false;
 let heatField = null;   // 最近一次計算的數值場（供測試與 heatValueAt 使用）
 
 /**
@@ -2767,42 +2908,315 @@ function updateHeatmap() {
     hatchImg.setUrl(hatchUrl); hatchImg.setBounds(f.bounds);
   }
   f.stats = { W: f.W, H: f.H, filled: f.filled, stations: state.data.pm.stations.length, ms: Math.round(performance.now() - t0) };
-  if (heatOn && !map.hasLayer(heatGroup)) heatGroup.addTo(map);
+  if (layerMode === 'pm25' && !map.hasLayer(heatGroup)) heatGroup.addTo(map);
 }
 
-/** 開 / 關熱力圖並更新按鈕與圖例 */
-function setHeatmap(on) {
-  heatOn = !!on;
-  document.getElementById('heatBtn').setAttribute('aria-pressed', String(heatOn));
-  document.getElementById('heatLegend').hidden = !heatOn;
-  if (!heatOn) document.getElementById('heatLegend').classList.remove('expanded');
-  if (heatGroup) {
-    if (heatOn && !map.hasLayer(heatGroup)) heatGroup.addTo(map);
-    if (!heatOn && map.hasLayer(heatGroup)) map.removeLayer(heatGroup);
+/** 與 PM2.5 熱力圖相同的畫布範圍與座標換算（台北市外接矩形，垂直方向為 Web Mercator） */
+function heatFrame() {
+  const lats = TAIPEI_OUTLINE.map((q) => q[0]), lngs = TAIPEI_OUTLINE.map((q) => q[1]);
+  const pad = 0.002;
+  const minLat = Math.min(...lats) - pad, maxLat = Math.max(...lats) + pad;
+  const minLng = Math.min(...lngs) - pad, maxLng = Math.max(...lngs) + pad;
+  const midLat = (minLat + maxLat) / 2;
+  const W = Math.ceil((maxLng - minLng) * 111320 * Math.cos(midLat * Math.PI / 180) / CONFIG.HEAT.cellM);
+  const H = Math.ceil((maxLat - minLat) * 110950 / CONFIG.HEAT.cellM);
+  const merc = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
+  const unmerc = (y) => (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI;
+  return { W, H, minLat, maxLat, minLng, maxLng, merc, unmerc, yTop: merc(maxLat), yBot: merc(minLat),
+           bounds: [[minLat, minLng], [maxLat, maxLng]] };
+}
+
+/* =====================================================================
+   §11-2 降雨機率圖層（與 PM2.5 熱力圖三選一：PM2.5 / 降雨機率 / 關閉）
+   - 資料：data/rain.json（GitHub Actions 每小時向 Open-Meteo 查詢網格點，約 1.5 km 間距，目前整點起 15 個整點）。
+     Open-Meteo 的降雨機率來自 0.25°（約 27 km）解析度的集合預報，網格只是內插取樣點，不代表真實解析度。
+   - 網頁取「現在」起最多 13 個時段（現在、+1 … +12 小時）；網格點雙線性內插後依門檻離散上色，裁切在台北市界內。
+   - 藍色系三級（≤ 30%、31–60%、> 60%，與燈號門檻相同），避免與綠黃紅燈號混淆。
+   - 檔案過期（> 3 小時）或讀取失敗 → 「降雨預報暫時無法取得」，不影響其他功能。
+   - Mock 情境不讀 rain.json，使用同一組網格的模擬降雨（大雨曝曬：大佳與花博附近 > 60% 並逐漸減弱）。
+   ===================================================================== */
+// 藍色系（淺 → 深）。透明度 0.35 會壓縮色差，所以三級刻意選用明度與飽和度差距大的藍色，且不含綠、黃、紅。
+const RAIN_COLORS = { low: [180, 215, 255], mid: [30, 144, 255], high: [10, 20, 160] };
+const RAIN_LEGEND = [
+  { level: 'low',  text: '≤ 30%（低）',    short: '≤30' },
+  { level: 'mid',  text: '31–60%（中）',   short: '31–60' },
+  { level: 'high', text: '> 60%（高）',    short: '>60' },
+];
+const RAIN_UNAVAILABLE = '降雨預報暫時無法取得';
+const RAIN_NOTE = 'Open-Meteo 氣象預報，降雨機率的原始解析度約 27 km，僅供參考';
+const RAIN_BAR_NOTE = '僅顯示降雨預報，跑點燈號為目前狀況';
+
+/** 降雨機率 → 'low' | 'mid' | 'high'（門檻與跑點燈號相同：≤ 30、31–60、> 60） */
+function rainLevel(v) {
+  const lv = classifyIndicator('rain', v);
+  return lv === 'green' ? 'low' : lv === 'yellow' ? 'mid' : lv === 'red' ? 'high' : null;
+}
+
+/** 台北整點鍵（'YYYY-MM-DDTHH:00'）加減小時 */
+function hourKeyShift(key, n) {
+  return currentTaipeiHourKey(new Date(new Date(`${key}:00+08:00`).getTime() + n * 3600e3));
+}
+
+/**
+ * 解析並檢查 rain.json（純函式，可傳入 now 測試）。
+ * 回傳 { ok: true, grid, hours, values, startIdx, slots } 或 { ok: false, reason: 'format' | 'stale' }。
+ * 過期：fetchedAt（沒有則用第一個整點）距今超過 CONFIG.RAIN.maxAgeH 小時。
+ * startIdx：目前台北整點在 hours 中的位置（0＝檔案產生時的整點）；slots＝從現在起可用的時段數（最多 13）。
+ */
+function parseRain(json, now = new Date()) {
+  const bad = (reason) => ({ ok: false, reason });
+  const g = json && json.grid;
+  if (!g || !['lat0', 'lng0', 'dLat', 'dLng'].every((k) => Number.isFinite(g[k])) || !Number.isInteger(g.rows) || !Number.isInteger(g.cols)) return bad('format');
+  if (!Array.isArray(json.hours) || !json.hours.length || !Array.isArray(json.values) || json.values.length !== g.rows * g.cols) return bad('format');
+  const t0 = new Date(json.fetchedAt || `${json.hours[0]}:00+08:00`);
+  if (isNaN(t0)) return bad('format');
+  if (now - t0 > CONFIG.RAIN.maxAgeH * 3600e3) return bad('stale');
+  const nowKey = currentTaipeiHourKey(now);
+  let startIdx = json.hours.indexOf(nowKey);
+  if (startIdx < 0) startIdx = nowKey < json.hours[0] ? 0 : -1;
+  if (startIdx < 0) return bad('stale'); // 時段全部已過去
+  return { ok: true, grid: g, hours: json.hours, values: json.values, startIdx, slots: Math.min(CONFIG.RAIN.slots, json.hours.length - startIdx) };
+}
+
+/** 網格內插：在 (lat, lng) 取第 idx 個時段的降雨機率（雙線性；缺值節點不參與並重新正規化；有效權重 < 0.5 回傳 null） */
+function rainInterp(grid, values, idx, lat, lng) {
+  const fj = (lat - grid.lat0) / grid.dLat, fi = (lng - grid.lng0) / grid.dLng;
+  if (fj < 0 || fi < 0 || fj > grid.rows - 1 || fi > grid.cols - 1) return null;
+  const j0 = Math.min(Math.floor(fj), grid.rows - 2), i0 = Math.min(Math.floor(fi), grid.cols - 2);
+  const ty = fj - j0, tx = fi - i0;
+  let sw = 0, sv = 0;
+  for (let dj = 0; dj < 2; dj++) {
+    for (let di = 0; di < 2; di++) {
+      const node = values[(j0 + dj) * grid.cols + i0 + di];
+      const v = node ? node[idx] : null;
+      if (v === null || v === undefined) continue;
+      const w = (di ? tx : 1 - tx) * (dj ? ty : 1 - ty);
+      sw += w; sv += w * v;
+    }
   }
+  return sw < 0.5 ? null : sv / sw;
 }
 
-/** 建立圖例並綁定開關 */
-function initHeatControl() {
-  const sw = (level) => `rgba(${HEAT_COLORS[level].join(',')},${CONFIG.HEAT.opacity})`; // 與疊在地圖上的實際顯示色一致
-  const full = '<h3>PM2.5 推估（μg/m³）</h3><ul>' +
-    HEAT_LEGEND.map((l) => `<li><span class="sw" style="background:${sw(l.level)}"></span>${l.text}</li>`).join('') +
-    `<li><span class="sw blank"></span>無資料（${CONFIG.IDW.heatBlankM / 1000} km 內無測站）</li></ul>` +
-    '<p class="note">依測站以反距離加權（IDW）估算，僅反映 PM2.5；各跑點是否適合出發，請看跑點燈號。</p>';
-  // 窄螢幕的單行小圖例：低 / 中 / 高 / 無資料；點一下展開完整說明
-  const short = ['低', '中', '高'];
-  const compact = 'PM2.5 ' + HEAT_LEGEND.map((l, i) => `<span class="i"><span class="sw" style="background:${sw(l.level)}"></span>${short[i]}</span>`).join('') +
-    '<span class="i"><span class="sw blank"></span>無資料</span>';
+/** Mock 降雨：大雨曝曬＝大佳與花博附近 > 60% 並逐時減弱；正常＝低降雨（北部山區稍後略升）；高空汙＝低降雨 */
+function mockRainValue(scenario, lat, lng, t) {
+  const clamp = (v) => Math.max(0, Math.min(100, Math.round(v)));
+  if (scenario === 'storm') {
+    const dKm = Math.hypot((lat - 25.0724) * 110.95, (lng - 121.5362) * 100.8);
+    const peak = Math.max(18, 88 - 5.6 * t);
+    return clamp(15 + (peak - 15) * Math.exp(-(dKm * dKm) / (2 * 2.3 * 2.3)));
+  }
+  if (scenario === 'pollution') return clamp(3 + 5 * (lat - 24.95) / 0.26);
+  const dKm = Math.hypot((lat - 25.16) * 110.95, (lng - 121.54) * 100.8);
+  const bump = Math.max(0, Math.min(1, (t - 4) / 6));
+  return clamp(9 + 7 * (lat - 24.95) / 0.26 + 22 * bump * Math.exp(-(dKm * dKm) / (2 * 3 * 3)));
+}
+
+/** 產生 Mock 降雨網格（結構與 rain.json 相同；時段從目前台北整點起算） */
+function buildMockRain(scenario, now = new Date()) {
+  const g = CONFIG.RAIN.grid, key0 = currentTaipeiHourKey(now);
+  const hours = Array.from({ length: CONFIG.RAIN.hours }, (_, n) => hourKeyShift(key0, n));
+  const values = [];
+  for (let j = 0; j < g.rows; j++) {
+    for (let i = 0; i < g.cols; i++) {
+      const lat = g.lat0 + j * g.dLat, lng = g.lng0 + i * g.dLng;
+      values.push(hours.map((_, t) => mockRainValue(scenario, lat, lng, t)));
+    }
+  }
+  return { ok: true, grid: g, hours, values, startIdx: 0, slots: CONFIG.RAIN.slots };
+}
+
+/** 把讀到的 rain.json（或讀取錯誤）轉成圖層狀態（純函式）：過期 / 格式錯誤 / 讀取失敗 → status 'unavailable' */
+function rainStateFrom(json, err, now = new Date()) {
+  if (err) return { status: 'unavailable', source: 'live', reason: (err && err.code) || 'network' };
+  const r = parseRain(json, now);
+  return r.ok ? { ...r, status: 'ok', source: 'live', fetchedAt: json.fetchedAt } : { status: 'unavailable', source: 'live', reason: r.reason };
+}
+
+/**
+ * 載入降雨資料。Mock 情境：同步回傳模擬網格（不發任何請求、不讀 rain.json）；
+ * 即時資料：回傳 Promise，讀 data/rain.json（加時間參數＋no-store，避開瀏覽器與 iPhone 主畫面 App 的快取）。
+ */
+function loadRain(fetcher = fetchJson) {
+  if (state.dataMode !== 'live') return { ...buildMockRain(state.dataMode), status: 'ok', source: 'mock' };
+  return fetcher(`${CONFIG.RAIN.url}?t=${Date.now()}`).then((json) => rainStateFrom(json, null), (err) => rainStateFrom(null, err));
+}
+
+let rainSeq = 0;
+/** 依目前資料模式重新載入降雨資料並更新畫面（只在降雨圖層開啟時呼叫） */
+async function refreshRain() {
+  const seq = ++rainSeq;
+  if (state.dataMode === 'live') { state.rain = { status: 'loading', source: 'live' }; renderRainUi(); }
+  const got = loadRain();
+  const r = got && typeof got.then === 'function' ? await got : got; // Mock 時同步完成
+  if (seq !== rainSeq) return;
+  state.rain = r;
+  state.rainSlot = r.status === 'ok' ? Math.min(state.rainSlot, r.slots - 1) : 0;
+  renderRainUi();
+  paintRain();
+}
+
+const rainCache = new Map(); // `${來源}|${時段}` → dataURL（資料更新時清空）
+let rainImg = null;
+function rainUrlFor(t) {
+  const r = state.rain;
+  const key = `${r.source}|${r.hours[0]}|${r.fetchedAt || ''}|${state.dataMode}|${t}`;
+  if (rainCache.has(key)) return rainCache.get(key);
+  const F = heatFrame(), g = r.grid, idx = r.startIdx + t;
+  const img = new ImageData(F.W, F.H);
+  for (let py = 0; py < F.H; py++) {
+    const lat = F.unmerc(F.yTop - (py + 0.5) / F.H * (F.yTop - F.yBot));
+    for (let px = 0; px < F.W; px++) {
+      const lng = F.minLng + (px + 0.5) / F.W * (F.maxLng - F.minLng);
+      const v = rainInterp(g, r.values, idx, lat, lng);
+      if (v === null) continue;
+      const c = RAIN_COLORS[rainLevel(v)], o = (py * F.W + px) * 4;
+      img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
+    }
+  }
+  const raw = document.createElement('canvas'); raw.width = F.W; raw.height = F.H;
+  raw.getContext('2d').putImageData(img, 0, 0);
+  const out = document.createElement('canvas'); out.width = F.W; out.height = F.H;
+  const ctx = out.getContext('2d');
+  ctx.beginPath();
+  TAIPEI_OUTLINE.forEach(([la, ln], i) => {
+    const x = (ln - F.minLng) / (F.maxLng - F.minLng) * F.W, y = (F.yTop - F.merc(la)) / (F.yTop - F.yBot) * F.H;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.closePath(); ctx.clip(); ctx.drawImage(raw, 0, 0); // 以市界裁切
+  const url = out.toDataURL('image/png');
+  if (rainCache.size > 40) rainCache.clear();
+  rainCache.set(key, url);
+  return url;
+}
+
+/** 依目前圖層與時段更新降雨圖層（顯示或移除） */
+function paintRain() {
+  const show = layerMode === 'rain' && state.rain && state.rain.status === 'ok';
+  if (!show) { if (rainImg && map.hasLayer(rainImg)) map.removeLayer(rainImg); return; }
+  const url = rainUrlFor(state.rainSlot), F = heatFrame();
+  if (!rainImg) rainImg = L.imageOverlay(url, F.bounds, { opacity: CONFIG.HEAT.opacity, interactive: false, alt: '降雨機率預報' });
+  else { rainImg.setUrl(url); rainImg.setBounds(F.bounds); }
+  if (!map.hasLayer(rainImg)) rainImg.addTo(map);
+}
+
+/** 時間滑桿文字：「現在｜14:00」「+3 小時｜14:00」 */
+function rainSlotLabel(i) {
+  const r = state.rain, hh = r.hours[r.startIdx + i].slice(11, 16);
+  return i === 0 ? `現在｜${hh}` : `+${i} 小時｜${hh}`;
+}
+
+/* ---------- 圖層切換（PM2.5 / 降雨機率 / 關閉）、圖例與時間滑桿 ---------- */
+let layerMode = 'off';
+const LAYER_NAMES = { off: '圖層', pm25: 'PM2.5', rain: '降雨機率' };
+
+/** 圖例內容（寬螢幕完整面板與窄螢幕單行小圖例） */
+function renderLegend() {
   const legend = document.getElementById('heatLegend');
-  legend.innerHTML = `<button type="button" class="lg-compact" aria-expanded="false" aria-label="PM2.5 圖例，點一下展開說明">${compact}</button><div class="lg-full">${full}</div>`;
+  if (layerMode === 'off') { legend.hidden = true; legend.classList.remove('expanded'); return; }
+  const op = CONFIG.HEAT.opacity;
+  let full, compact, label;
+  if (layerMode === 'pm25') {
+    const sw = (lv) => `rgba(${HEAT_COLORS[lv].join(',')},${op})`; // 與疊在地圖上的實際顯示色一致
+    full = '<h3>PM2.5 推估（μg/m³）</h3><ul>' + HEAT_LEGEND.map((l) => `<li><span class="sw" style="background:${sw(l.level)}"></span>${l.text}</li>`).join('') +
+      `<li><span class="sw blank"></span>無資料（${CONFIG.IDW.heatBlankM / 1000} km 內無測站）</li></ul>` +
+      '<p class="note">依測站以反距離加權（IDW）估算，僅反映 PM2.5；各跑點是否適合出發，請看跑點燈號。</p>';
+    compact = 'PM2.5 ' + HEAT_LEGEND.map((l, i) => `<span class="i"><span class="sw" style="background:${sw(l.level)}"></span>${['低', '中', '高'][i]}</span>`).join('') +
+      '<span class="i"><span class="sw blank"></span>無資料</span>';
+    label = 'PM2.5 圖例';
+  } else {
+    const sw = (lv) => `rgba(${RAIN_COLORS[lv].join(',')},${op})`;
+    const bad = state.rain && state.rain.status === 'unavailable';
+    full = '<h3>降雨機率（%）</h3><ul>' + RAIN_LEGEND.map((l) => `<li><span class="sw" style="background:${sw(l.level)}"></span>${l.text}</li>`).join('') + '</ul>' +
+      (bad ? `<p class="msg">${RAIN_UNAVAILABLE}</p>` : '') + `<p class="note">${RAIN_NOTE}。</p>`;
+    compact = '降雨 ' + RAIN_LEGEND.map((l) => `<span class="i"><span class="sw" style="background:${sw(l.level)}"></span>${l.short}</span>`).join('');
+    label = '降雨機率圖例';
+  }
+  legend.innerHTML = `<button type="button" class="lg-compact" aria-expanded="${legend.classList.contains('expanded')}" aria-label="${label}，點一下展開說明">${compact}</button><div class="lg-full">${full}</div>`;
   legend.querySelector('.lg-compact').addEventListener('click', (e) => {
     const open = legend.classList.toggle('expanded');
     e.currentTarget.setAttribute('aria-expanded', String(open));
   });
+  legend.hidden = false;
+}
+
+/** 降雨時間滑桿（只在降雨圖層顯示）；資料不可用時顯示「降雨預報暫時無法取得」 */
+function renderRainBar() {
+  const bar = document.getElementById('rainBar');
+  if (layerMode !== 'rain') { bar.hidden = true; return; }
+  const r = state.rain;
+  bar.hidden = false;
+  if (!r || r.status === 'loading') { bar.innerHTML = '<p class="rb-msg" role="status">載入降雨預報…</p>'; return; }
+  if (r.status === 'unavailable') { bar.innerHTML = `<p class="rb-msg" role="status">${RAIN_UNAVAILABLE}</p>`; return; }
+  const max = r.slots - 1;
+  bar.innerHTML = `<div class="rb-top"><span class="rb-label" id="rainSlotLabel" aria-live="polite">${rainSlotLabel(state.rainSlot)}</span></div>
+    <input id="rainSlider" type="range" min="0" max="${max}" step="1" value="${state.rainSlot}" aria-label="降雨預報時間（現在到 +${max} 小時）" aria-valuetext="${rainSlotLabel(state.rainSlot)}">
+    <div class="rb-ticks" aria-hidden="true"><span>現在</span><span>+${Math.round(max / 2)}</span><span>+${max}</span></div>
+    <p class="rb-note">${RAIN_BAR_NOTE}</p>`;
+}
+
+function renderRainUi() { renderLegend(); renderRainBar(); }
+
+/** 切換圖層：'pm25' | 'rain' | 'off'（單選；切換時圖例、滑桿、地圖圖層一起換） */
+function setLayer(mode) {
+  if (!LAYER_NAMES[mode]) return;
+  layerMode = mode;
+  if (heatGroup) {
+    if (mode === 'pm25' && !map.hasLayer(heatGroup)) heatGroup.addTo(map);
+    if (mode !== 'pm25' && map.hasLayer(heatGroup)) map.removeLayer(heatGroup);
+  }
+  const btn = document.getElementById('heatBtn');
+  btn.dataset.layer = mode;
+  document.getElementById('heatBtnLabel').textContent = LAYER_NAMES[mode];
+  const desc = mode === 'off' ? '關閉' : LAYER_NAMES[mode];
+  btn.setAttribute('aria-label', `地圖圖層：${desc}（點擊切換）`);
+  btn.title = `地圖圖層：${desc}`;
+  document.querySelectorAll('#layerMenu [data-layer]').forEach((el) => el.setAttribute('aria-checked', String(el.dataset.layer === mode)));
+  if (mode === 'rain') { renderRainUi(); refreshRain(); } else { renderRainUi(); paintRain(); }
+}
+/** 舊介面相容：開 / 關 PM2.5 熱力圖 */
+function setHeatmap(on) { setLayer(on ? 'pm25' : 'off'); }
+
+function toggleLayerMenu(open) {
+  const menu = document.getElementById('layerMenu'), btn = document.getElementById('heatBtn');
+  const willOpen = open === undefined ? menu.hidden : open;
+  menu.hidden = !willOpen;
+  btn.setAttribute('aria-expanded', String(willOpen));
+  if (willOpen) { const cur = menu.querySelector('[aria-checked="true"]'); if (cur) cur.focus(); }
+}
+
+/** 建立圖層按鈕、選單與時間滑桿的事件 */
+function initHeatControl() {
   const ctl = document.getElementById('heatCtl');
   L.DomEvent.disableClickPropagation(ctl); // 點按鈕不要觸發地圖點擊
   L.DomEvent.disableScrollPropagation(ctl);
-  document.getElementById('heatBtn').addEventListener('click', () => setHeatmap(!heatOn));
+  L.DomEvent.disableClickPropagation(document.getElementById('rainBar'));
+  document.getElementById('heatBtn').addEventListener('click', () => toggleLayerMenu());
+  document.getElementById('layerMenu').addEventListener('click', (e) => {
+    const item = e.target.closest('[data-layer]');
+    if (!item) return;
+    toggleLayerMenu(false);
+    setLayer(item.dataset.layer);
+    document.getElementById('heatBtn').focus();
+  });
+  document.getElementById('layerMenu').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const items = [...document.querySelectorAll('#layerMenu [data-layer]')];
+    const i = items.indexOf(document.activeElement);
+    items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#heatCtl')) toggleLayerMenu(false); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.getElementById('layerMenu').hidden) { toggleLayerMenu(false); document.getElementById('heatBtn').focus(); }
+  });
+  document.getElementById('rainBar').addEventListener('input', (e) => {
+    if (e.target.id !== 'rainSlider' || !state.rain || state.rain.status !== 'ok') return;
+    state.rainSlot = Number(e.target.value);
+    document.getElementById('rainSlotLabel').textContent = rainSlotLabel(state.rainSlot);
+    e.target.setAttribute('aria-valuetext', rainSlotLabel(state.rainSlot));
+    paintRain();
+  });
+  renderRainUi();
 }
 
 /* =====================================================================
@@ -3469,7 +3883,7 @@ window.SafeAir = {
   RUN_SPOTS, CONFIG, PM25_SOURCES, state, getFavStore: () => favStore, createFavStore, validateFavName, haversine, selectSpot,
   idwEstimate, moenvAdapter, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
-  pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, getHeatField: () => heatField, heatValueAt, heatPixelAt, buildHeatField,
+  setLayer, getLayer: () => layerMode, getRain: () => state.rain, parseRain, rainStateFrom, buildMockRain, rainInterp, rainLevel, pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, getHeatField: () => heatField, heatValueAt, heatPixelAt, buildHeatField,
 };
 
 bootstrap();

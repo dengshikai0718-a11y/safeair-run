@@ -1,4 +1,4 @@
-# 部署 GitHub Pages，並附上環境部 PM2.5 資料（data/pm25.json）
+# 部署 GitHub Pages，並附上環境部 PM2.5 資料（data/pm25.json）與 Open-Meteo 降雨預報網格（data/rain.json）
 # - 觸發：push 到 main、每小時第 45 分（環境部整點資料約 40 分後上線）、手動執行。
 # - 資料檔只存在於 Pages 部署內容，不 commit 到任何分支（main 歷史不會每小時增加）。
 # - MOENV_API_KEY 只在「抓取」步驟使用，腳本不會印出金鑰。
@@ -46,6 +46,9 @@ jobs:
           MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
           ALLOW_MISSING: ${{ github.event_name == 'push' }}
         run: python3 tools/fetch_moenv.py --out _site/data/pm25.json --fallback-url "${{ steps.pages.outputs.base_url }}/data/pm25.json"
+
+      - name: 抓取降雨預報網格（Open-Meteo；選用功能，失敗不影響部署）
+        run: python3 tools/fetch_rain.py --out _site/data/rain.json --fallback-url "${{ steps.pages.outputs.base_url }}/data/rain.json"
 
       - name: 上傳網站內容
         uses: actions/upload-pages-artifact@v5

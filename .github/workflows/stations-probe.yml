@@ -1,6 +1,6 @@
 # 階段 A+：測站加密評估探測
 # - 手動執行：完整探測（國網中心 moenviot 資料集端點、STA 憑證／CORS、台北範圍內的 PM2.5 感測器統計）。
-# - 每週一 08:07（台北時間）自動執行：只檢查 sta.colife.org.tw 的憑證與端點能否連線（--watch）。
+# - 每週一 08:17（台北時間）自動執行：只檢查 sta.colife.org.tw 的憑證與端點能否連線（--watch）。
 #     仍不可連線 → 正常結束（綠色勾勾）；變成可連線 → 這次執行失敗（紅色叉叉），GitHub 會寄通知信。
 #     （排程失敗的通知信會寄給「最後修改 cron 那一行的人」，見 README / ROADMAP 的說明。）
 # - 不需要任何金鑰；只在執行紀錄與 Summary 輸出摘要，不 commit、不上傳資料檔。
@@ -9,7 +9,7 @@ name: 測試：測站加密探測（手動＋每週檢查）
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 0 * * 1'   # UTC 週一 00:07 ＝ 台北時間週一 08:07
+    - cron: '17 0 * * 1'   # UTC 週一 00:17 ＝ 台北時間週一 08:17
 
 permissions:
   contents: read
