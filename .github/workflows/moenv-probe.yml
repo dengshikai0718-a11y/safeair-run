@@ -1,0 +1,23 @@
+# 階段 A 第 1 時段：環境部 AQI API 探測（測試用，只能手動觸發）
+# - 使用 GitHub Secrets 的 MOENV_API_KEY；腳本不會印出金鑰（GitHub 也會自動遮蔽 Secrets）。
+# - 只在執行紀錄與 Summary 輸出摘要，不 commit、不上傳任何資料檔。
+name: 測試：環境部 AQI 探測（手動）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 取得程式碼（讀取 tools/moenv_probe.py 與 index.html 的市界）
+        uses: actions/checkout@v4
+
+      - name: 呼叫 API 並輸出摘要
+        env:
+          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
+        run: python3 tools/moenv_probe.py
