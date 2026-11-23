@@ -6,6 +6,9 @@
 2. 民生公共物聯網 STA 主機：SSL 憑證效期、CORS 標頭；若憑證有效且可連線，統計台北範圍內的 PM2.5 感測器
    （數量、PM2.5 數值分布、0 值與異常值比例、資料新鮮度）。
 憑證過期時只讀取憑證效期做診斷，不會在未驗證的連線上抓資料。
+
+--watch 模式（每週排程用）：只檢查 sta.colife.org.tw 的憑證與端點能否通過驗證連線。
+不可連線 → 正常結束（exit 0）；變成可連線 → 以 exit 1 結束，讓 GitHub Actions 顯示紅色叉叉並寄通知信。
 """
 import json
 import math
@@ -225,7 +228,39 @@ def stats(base):
         emit(f'| {x["name"]} | {x["lat"]:.5f} | {x["lng"]:.5f} | {x["res"]} | {x["t"].astimezone(TPE):%m/%d %H:%M} |' if x['t'] else f'| {x["name"]} | {x["lat"]:.5f} | {x["lng"]:.5f} | {x["res"]} | — |')
 
 
+WATCH_HOST = 'sta.colife.org.tw'
+WATCH_ENDPOINTS = [f'https://{WATCH_HOST}/STA_AirQuality_EPAIoT/v1.0', f'https://{WATCH_HOST}/STA_AirQuality_v2/v1.0']
+
+
+def watch():
+    """每週檢查：STA 是否恢復可連線（憑證通過驗證即算可連線）。回傳 True＝已恢復"""
+    emit(f'## STA 恢復檢查：{WATCH_HOST}（{datetime.now(TPE):%Y-%m-%d %H:%M} 台北時間）')
+    emit('```')
+    emit(cert_info(WATCH_HOST))
+    emit('```')
+    recovered = []
+    for url in WATCH_ENDPOINTS:
+        s, h, b = verified_get(url)
+        if s is None:
+            emit(f'- ❌ `{url}`：無法連線（含憑證驗證）— {b}')
+        else:
+            emit(f'- ✅ `{url}`：通過憑證驗證，HTTP {s}，`Access-Control-Allow-Origin`：`{hdr(h, "Access-Control-Allow-Origin")}`')
+            recovered.append((url, s))
+    return recovered
+
+
 def main():
+    if '--watch' in sys.argv:
+        recovered = watch()
+        path = os.environ.get('GITHUB_STEP_SUMMARY')
+        if path:
+            with open(path, 'a', encoding='utf-8') as f:
+                f.write('\n'.join(OUT) + '\n')
+        if recovered:
+            print(f'::error title=STA 已恢復可連線::{WATCH_HOST} 現在可通過憑證驗證連線（{len(recovered)} 個端點）。可以重新評估階段 A+（微型感測器），請手動執行「測試：測站加密探測」取得完整結果。')
+            sys.exit(1)
+        emit('> 仍無法連線（憑證過期或端點失敗），本次正常結束。')
+        return
     urls = probe_dataset()
     probe_sta(urls)
     emit()
