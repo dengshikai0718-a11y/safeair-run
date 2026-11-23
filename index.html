@@ -1326,6 +1326,29 @@ function runTests() {
     const ratio = contrastRatio(css.getPropertyValue(v).trim(), '#FFFFFF');
     cases.push({ name: `對比度 ${v}`, expected: '≥ 4.5', actual: ratio.toFixed(2), ok: ratio >= 4.5 });
   }
+  // ---- 推薦規則依對象區分 ----
+  {
+    const sp5 = RUN_SPOTS.find((x) => x.id === 5), sp1 = RUN_SPOTS.find((x) => x.id === 1);
+    const sorted = (r) => r.every((x, i) => i === 0 ||
+      (STATUS_ORDER[r[i - 1].status] < STATUS_ORDER[x.status] || (r[i - 1].status === x.status && r[i - 1].distM <= x.distM)));
+    t('推薦：綠燈跑點不顯示替代跑點', recommendSpots(sp1.lat, sp1.lng, 'green', 1, 'spot'), null);
+    t('推薦：資料不足的跑點不顯示替代跑點', recommendSpots(sp1.lat, sp1.lng, 'unknown', 1, 'spot'), null);
+    const altRed = recommendSpots(sp5.lat, sp5.lng, 'red', 5, 'spot');
+    t('推薦：替代跑點只含燈號較佳者', altRed.every((x) => STATUS_ORDER[x.status] < STATUS_ORDER.red), true);
+    t('推薦：替代跑點排除自己', altRed.some((x) => x.spot.id === 5), false);
+    t('推薦：替代跑點排序（燈號再距離）', sorted(altRed), true);
+    const nearAny = recommendSpots(sp1.lat, sp1.lng, 'green', null, 'place');
+    t('推薦：地點類（綠燈）也列出附近跑點', Array.isArray(nearAny) && nearAny.length > 0, true);
+    t('推薦：附近跑點最多 3 筆', nearAny.length <= CONFIG.REC.max, true);
+    t('推薦：附近跑點都在 5 km 內', nearAny.every((x) => x.distM <= 5000), true);
+    t('推薦：附近跑點排序（燈號再距離）', sorted(nearAny), true);
+    t('推薦：附近跑點可含任何燈號（不篩選）', recommendSpots(sp5.lat, sp5.lng, 'red', null, 'place').some((x) => x.spot.id === 5), true);
+    t('推薦：5 km 內沒有跑點 → 空陣列', recommendSpots(24.137, 120.687, 'green', null, 'place').length, 0);
+    t('推薦：空狀態文字（地點類）', recommendHtml([], 'place').includes('5 公里內沒有收錄的跑點'), true);
+    t('推薦：空狀態文字（跑點）', recommendHtml([], 'spot').includes('附近暫無更佳跑點，建議改至室內運動'), true);
+    t('推薦：標題（跑點）', recommendHtml([], 'spot').includes('替代跑點'), true);
+    t('推薦：標題（地點）', recommendHtml([], 'place').includes('附近跑點'), true);
+  }
   // ---- 長按選點偵測器（假時鐘）----
   {
     const q = [], trig = [];
@@ -1771,28 +1794,35 @@ async function ensureSearchWeather() {
    §6 換點推薦
    ===================================================================== */
 /**
- * 推薦燈號較佳的跑點：只在參考位置為 🟡 / 🔴 時提供（其餘回傳 null＝不顯示推薦區塊）。
- * 候選：參考點 5 km（Haversine）內、燈號嚴格優於參考點的跑點（資料不足者不列）；
- * 排序：燈號較佳者在前，同燈號依距離由近到遠；最多 3 筆。
- * 套用於三種對象：選取的跑點（排除自己）、目前位置、搜尋位置。
+ * 依對象推薦跑點（5 km 內，Haversine；最多 3 筆；先依燈號、再依距離）：
+ * - kind 'spot'（選取的跑點）：只在該跑點為 🟡 / 🔴 時提供，列出燈號「嚴格較佳」的跑點（排除自己）→ 標題「替代跑點」；
+ *   🟢 / 資料不足回傳 null（不顯示區塊）。
+ * - kind 'place'（目前位置、搜尋地點、地圖選點）：一律列出 5 km 內的跑點，不論燈號 → 標題「附近跑點」。
+ * 回傳 [{ spot, status, distM }]（可為空陣列）或 null。
  */
-function recommendSpots(lat, lng, status, excludeId = null) {
-  if (status !== 'yellow' && status !== 'red') return null;
+function recommendSpots(lat, lng, status, excludeId = null, kind = 'spot') {
+  if (kind === 'spot' && status !== 'yellow' && status !== 'red') return null;
   const rank = STATUS_ORDER[status];
   return RUN_SPOTS
     .filter((sp) => sp.id !== excludeId)
     .map((sp) => ({ spot: sp, status: getSpotStatus(sp.id), distM: haversine(lat, lng, sp.lat, sp.lng) }))
-    .filter((x) => x.status !== 'unknown' && STATUS_ORDER[x.status] < rank && x.distM <= CONFIG.REC.radiusM)
+    .filter((x) => x.distM <= CONFIG.REC.radiusM &&
+                   (kind === 'place' || (x.status !== 'unknown' && STATUS_ORDER[x.status] < rank)))
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.distM - b.distM)
     .slice(0, CONFIG.REC.max);
 }
 
-function recommendHtml(rec) {
+const REC_TEXT = {
+  spot:  { title: '替代跑點', empty: '附近暫無更佳跑點，建議改至室內運動' },
+  place: { title: '附近跑點', empty: '5 公里內沒有收錄的跑點' },
+};
+function recommendHtml(rec, kind = 'spot') {
   if (rec === null) return '';
-  return `<section class="rec" aria-label="更佳跑點推薦"><h3 class="rec-title">附近更佳跑點</h3>${
+  const tx = REC_TEXT[kind];
+  return `<section class="rec" aria-label="${tx.title}"><h3 class="rec-title">${tx.title}</h3>${
     rec.length
       ? `<ul class="spot-list rec-list">${rec.map((x) => spotItemHtml(x.spot, x.distM)).join('')}</ul>`
-      : '<p class="rec-empty">附近暫無更佳跑點，建議改至室內運動</p>'}</section>`;
+      : `<p class="rec-empty">${tx.empty}</p>`}</section>`;
 }
 
 /* =====================================================================
@@ -1813,7 +1843,7 @@ function metricHtml(ind, reading, ev) {
 
 /**
  * 資訊卡內容。
- * @param {{title:string, sub:string, ev:object, reading:object, closable:boolean, ref:{lat:number,lng:number,excludeId:?number}}} o
+ * @param {{title:string, sub:string, ev:object, reading:object, closable:boolean, ref:{lat:number,lng:number,excludeId:?number,kind:'spot'|'place'}}} o
  */
 function cardHtml({ title, sub, ev, reading, closable, ref }) {
   const status = ev.status;
@@ -1832,7 +1862,7 @@ function cardHtml({ title, sub, ev, reading, closable, ref }) {
     <p class="card-advice">${escapeHtml(adviceFor(ev))}</p>
     <div class="metrics">${INDICATORS.map((ind) => metricHtml(ind, reading, ev)).join('')}</div>
     ${notes.map((n) => `<p class="card-note">${escapeHtml(n)}</p>`).join('')}
-    ${ref ? recommendHtml(recommendSpots(ref.lat, ref.lng, status, ref.excludeId)) : ''}
+    ${ref ? recommendHtml(recommendSpots(ref.lat, ref.lng, status, ref.excludeId, ref.kind), ref.kind) : ''}
     <p class="card-foot">更新 ${state.data ? formatTaipei(state.data.updatedAt) : '—'}・${escapeHtml(src.label)}</p>
     ${closable ? '' : `<p class="card-tip">${pickTip()}</p>`}
   </article>`;
@@ -1863,18 +1893,18 @@ function infoCardHtml() {
     if (!place.inTaipei) return outOfScopeCardHtml(place);
     if (!state.searchEvaluation) return hint('資料載入中…');
     return cardHtml({ title: place.name, sub: place.sub || '搜尋位置', ev: state.searchEvaluation, reading: state.searchReading,
-                      closable: true, ref: { lat: place.lat, lng: place.lng, excludeId: null } });
+                      closable: true, ref: { lat: place.lat, lng: place.lng, excludeId: null, kind: 'place' } });
   }
   const spot = RUN_SPOTS.find((x) => x.id === state.selectedId);
   if (state.cardFocus === 'spot' && spot && state.evaluations[spot.id]) {
     return cardHtml({ title: spot.name, sub: `${spot.district}・${SPOT_TYPE_LABEL[spot.type] || ''}`,
                       ev: state.evaluations[spot.id], reading: state.readings[spot.id], closable: true,
-                      ref: { lat: spot.lat, lng: spot.lng, excludeId: spot.id } });
+                      ref: { lat: spot.lat, lng: spot.lng, excludeId: spot.id, kind: 'spot' } });
   }
   if (state.userPos && state.userEvaluation) {
     return cardHtml({ title: '目前位置', sub: inBBox(state.userPos.lat, state.userPos.lng) ? '依附近測站與氣象估算' : '不在台北市範圍內',
                       ev: state.userEvaluation, reading: state.userReading, closable: false,
-                      ref: { lat: state.userPos.lat, lng: state.userPos.lng, excludeId: null } });
+                      ref: { lat: state.userPos.lat, lng: state.userPos.lng, excludeId: null, kind: 'place' } });
   }
   return hint(`點選地圖上的跑點，查看是否適合出發${state.geoFailed ? '<br>（未取得定位，無法顯示目前位置）' : ''}<br>${pickTip()}`);
 }
@@ -2743,7 +2773,7 @@ window.SafeAir = {
   RUN_SPOTS, CONFIG, PM25_SOURCES, state, haversine, selectSpot,
   idwEstimate, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
-  pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, heatValueAt, heatPixelAt, buildHeatField,
+  pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, getHeatField: () => heatField, heatValueAt, heatPixelAt, buildHeatField,
 };
 
 bootstrap();
