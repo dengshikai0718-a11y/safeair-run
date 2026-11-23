@@ -105,20 +105,20 @@ button { font: inherit; color: inherit; }
 .sb-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
 
 .spot-list { list-style: none; margin: 0; padding: 0 8px 16px; }
-.spot-item {
+.spot-item, .fav-item {
   display: flex; align-items: center; gap: 12px; width: 100%;
   min-height: 56px; padding: 8px 12px; border: 0; border-radius: 10px;
   background: transparent; text-align: left; cursor: pointer;
 }
-.spot-item:hover { background: var(--hover); }
-.spot-item[aria-current="true"] { background: var(--hover); box-shadow: inset 3px 0 0 var(--text); }
-.spot-item .meta { flex: 1; min-width: 0; }
-.spot-item .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.spot-item .sub { display: flex; align-items: baseline; gap: 0; min-width: 0; font-size: 13px; color: var(--text-2); }
+.spot-item:hover, .fav-item:hover { background: var(--hover); }
+.spot-item[aria-current="true"], .fav-item[aria-current="true"] { background: var(--hover); box-shadow: inset 3px 0 0 var(--text); }
+.spot-item .meta, .fav-item .meta { flex: 1; min-width: 0; }
+.spot-item .name, .fav-item .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spot-item .sub, .fav-item .sub { display: flex; align-items: baseline; gap: 0; min-width: 0; font-size: 13px; color: var(--text-2); }
 /* 狀態文字放在名稱下方第二行，nowrap 不斷字；地點資訊太長時以省略號截斷 */
-.spot-item .st-label { flex: none; white-space: nowrap; font-weight: 600; color: var(--st-text); }
-.spot-item .where { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.spot-item .dist { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.spot-item .st-label, .fav-item .st-label { flex: none; white-space: nowrap; font-weight: 600; color: var(--st-text); }
+.spot-item .where, .fav-item .where { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.spot-item .dist, .fav-item .dist { font-size: 13px; color: var(--text-2); white-space: nowrap; }
 
 /* 狀態圓形徽章（色塊＋白色圖示），用於列表與標記 */
 .status-dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
@@ -397,6 +397,53 @@ button { font: inherit; color: inherit; }
 }
 
 /* =====================================================================
+   §S10 我的最愛
+   ===================================================================== */
+:root { --fav: #4F46E5; } /* 靛藍：與三級燈號色明顯區分（對白底 6.3:1） */
+.fav-btn { width: var(--touch); height: var(--touch); margin: -8px 0 -8px 0; flex: none; border: 0; border-radius: 50%; background: transparent;
+           color: var(--fav); display: grid; place-items: center; cursor: pointer; }
+.fav-btn:hover { background: var(--hover); }
+.fav-btn .icon { width: 24px; height: 24px; }
+.fav-btn[aria-pressed="true"] .icon { fill: currentColor; }
+.fav-btn.is-disabled { color: var(--text-2); opacity: .55; }
+.card-actions { display: flex; align-items: center; margin-right: -8px; }
+.card-actions .card-close { margin: -8px 0; }
+
+.fav-form { display: grid; gap: 6px; margin-top: 10px; padding: 10px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.fav-form input { width: 100%; min-height: var(--touch); padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+                  font: 16px var(--font); color: var(--text); } /* 16px 避免 iOS 聚焦時自動放大 */
+.fav-form-row { display: flex; align-items: center; gap: 10px; }
+.fav-count { margin-right: auto; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.fav-error { margin: 0; min-height: 0; font-size: 13px; color: var(--red-text); }
+.fav-error:empty { display: none; }
+.card-rename { width: var(--touch); height: var(--touch); margin: -8px 0; flex: none; border: 0; border-radius: 50%; background: transparent;
+               color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+.card-rename:hover { background: var(--hover); }
+.card-rename .icon { width: 18px; height: 18px; }
+
+.favs { padding-bottom: 4px; }
+.fav-count-badge { font-weight: 400; color: var(--text-2); }
+.fav-empty { margin: 0 20px 8px; font-size: 14px; color: var(--text-2); line-height: 1.5; }
+.fav-warn { margin: 0 20px 8px; font-size: 12px; color: var(--yellow-text); }
+.fav-item .name .icon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; fill: var(--fav); stroke: var(--fav); }
+.fav-note { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.fav-block-note { margin: 4px 20px 10px; }
+#sheet .fav-block-note { display: none; } /* 窄螢幕的說明放在設定選單，避免重複 */
+
+/* 地圖：跑點標記的小星號、自選點位的星形標記 */
+.spot-marker .fav-badge { position: absolute; top: -5px; right: -5px; width: 18px; height: 18px; border-radius: 50%; background: var(--fav);
+                          border: 2px solid #fff; display: grid; place-items: center; color: #fff; box-shadow: 0 1px 3px rgba(15, 23, 42, .4); }
+.spot-marker .fav-badge .icon { width: 10px; height: 10px; fill: #fff; stroke: #fff; stroke-width: 1; }
+.spot-marker .pin { position: relative; }
+.fav-marker { background: none; border: 0; filter: drop-shadow(0 2px 3px rgba(15, 23, 42, .4)); }
+.fav-marker .star { position: relative; width: 38px; height: 38px; transition: transform .15s ease; }
+.fav-marker .star svg { width: 38px; height: 38px; fill: var(--fav); stroke: #fff; stroke-width: 1.6; stroke-linejoin: round; }
+.fav-marker.is-selected .star { transform: scale(1.25); }
+.fav-marker .star-dot { position: absolute; right: -2px; bottom: -2px; width: 18px; height: 18px; border-radius: 50%; background: var(--st); border: 2px solid #fff;
+                        display: grid; place-items: center; color: #fff; }
+.fav-marker .star-dot .icon { width: 11px; height: 11px; stroke-width: 3; }
+
+/* =====================================================================
    §S6 小提示（Toast）
    ===================================================================== */
 #toast {
@@ -424,6 +471,8 @@ button { font: inherit; color: inherit; }
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.9 5.9 6.5.95-4.7 4.6 1.1 6.5L12 17.7l-5.8 3.05 1.1-6.5-4.7-4.6 6.5-.95z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
   <symbol id="i-run" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="1.8"/><path d="M8 21l3-6 3 2v5"/><path d="M6 12l2-4 4-1 3 3 3 1"/><path d="M11 15l1-5"/></symbol>
 </svg>
 
@@ -447,6 +496,8 @@ button { font: inherit; color: inherit; }
     <div class="sb-scroll">
       <!-- 資訊卡：選取跑點時顯示該跑點；未選取時顯示「目前位置」環境狀態 -->
       <div class="js-card" aria-live="polite"></div>
+      <!-- 我的最愛：位於資訊卡下方、跑點列表上方 -->
+      <section class="favs js-favs" aria-label="我的最愛"></section>
       <h2 class="sb-section-title">跑點列表</h2>
       <ul class="spot-list js-spotlist"></ul>
     </div>
@@ -486,6 +537,8 @@ button { font: inherit; color: inherit; }
         <div class="src-wrap" data-src="mobile"></div>
       </div>
       <div class="js-monitor mon"></div>
+      <p class="fav-note">最愛只存在這台裝置與這個瀏覽器；iPhone 主畫面 App 與 Safari 的最愛是分開的。</p>
+      <p class="fav-note fav-warn js-fav-warn" hidden></p>
     </div>
     <!-- 提醒橫幅（背景監測觸發時顯示，可關閉） -->
     <div id="alerts"></div>
@@ -502,6 +555,7 @@ button { font: inherit; color: inherit; }
       <div id="sheetBody" class="sheet-body">
         <div class="js-card" aria-live="polite"></div>
         <div class="sheet-more">
+          <section class="favs js-favs" aria-label="我的最愛"></section>
           <h2 class="sb-section-title">跑點列表</h2>
           <ul class="spot-list js-spotlist"></ul>
         </div>
@@ -657,6 +711,10 @@ const MOCK_STATIONS = [
   { id: 'm22', name: '木柵',   lat: 24.987, lng: 121.555, pm: 8 },
   { id: 'm23', name: '文山',   lat: 24.998, lng: 121.581, pm: 6 },
   { id: 'm24', name: '陽明山', lat: 25.155, lng: 121.545, pm: 5 },
+  // 大佳河濱公園東側兩站：「高空汙」情境（pol）落在黃燈範圍，讓熱力圖在大佳周圍形成肉眼可見的黃色區塊；
+  // 其他情境照一般規則（pm 偏低），不影響任何跑點燈號（跑點數值由旁邊的錨點測站決定）。
+  { id: 'm26', name: '大直', lat: 25.0790, lng: 121.5470, pm: 10, pol: 29 },
+  { id: 'm27', name: '大佳東', lat: 25.0700, lng: 121.5470, pm: 11, pol: 31 },
   { id: 'm25', name: '華江',   lat: 25.027, lng: 121.497, pm: 40 }, // 與萬華、南機場一起讓青年公園周圍形成肉眼可見的高值區
 ];
 
@@ -677,7 +735,7 @@ const MOCK_SCENARIOS = {
   // 高空汙：大佳河濱公園 PM2.5 落在黃燈，其餘四點 ≥ 35.5
   pollution: {
     label: '高空汙',
-    stationPm: (st) => Math.round((st.pm * 1.5 + 32) * 10) / 10,
+    stationPm: (st) => (st.pol !== undefined ? st.pol : Math.round((st.pm * 1.5 + 32) * 10) / 10),
     weather: { rain: 5, uvi: 4.0, feels: 22.0 },
     spots: {
       1: { pm25: 46.0 },
@@ -765,12 +823,26 @@ function currentTaipeiHourKey(now = new Date()) {
 
 /** 小提示：顯示數秒後自動消失 */
 let toastTimer = null;
-function showToast(msg, ms = 3500) {
+let toastLockUntil = 0, toastLockTimer = null, toastPending = null;
+/**
+ * 顯示小提示。important 的提示（例如「最愛無法保存」）在顯示期間不會被其他提示蓋掉；
+ * 期間內的其他提示只保留最新一則，等重要提示結束後再顯示。
+ */
+function showToast(msg, ms = 3500, important = false) {
+  if (!important && Date.now() < toastLockUntil) { toastPending = { msg, ms }; return; }
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+  if (important) {
+    toastLockUntil = Date.now() + ms;
+    clearTimeout(toastLockTimer);
+    toastLockTimer = setTimeout(() => {
+      toastLockUntil = 0;
+      if (toastPending) { const q = toastPending; toastPending = null; showToast(q.msg, q.ms); }
+    }, ms);
+  }
 }
 
 /* =====================================================================
@@ -1036,6 +1108,8 @@ function weatherPoints() {
   const pts = RUN_SPOTS.map((s) => ({ key: `spot-${s.id}`, spotId: s.id, lat: s.lat, lng: s.lng }));
   if (state.userPos) pts.push({ key: 'user', lat: state.userPos.lat, lng: state.userPos.lng });
   if (state.searchPlace && state.searchPlace.inTaipei) pts.push({ key: 'search', lat: state.searchPlace.lat, lng: state.searchPlace.lng });
+  // 我的最愛的自選點位：與跑點同一次批次查詢（Open-Meteo 多座標請求）
+  for (const f of favStore.items) if (f.kind === 'place') pts.push({ key: `fav-${f.id}`, lat: f.lat, lng: f.lng });
   return pts;
 }
 
@@ -1093,6 +1167,10 @@ function computeReadings() {
   state.userReading = state.userPos ? readingAt(state.userPos.lat, state.userPos.lng, 'user') : null;
   const sp = state.searchPlace;
   state.searchReading = sp && sp.inTaipei && wx.byKey.search ? readingAt(sp.lat, sp.lng, 'search') : null;
+  state.favReadings = {};
+  for (const f of favStore.items) {
+    if (f.kind === 'place' && wx.byKey[`fav-${f.id}`]) state.favReadings[f.id] = readingAt(f.lat, f.lng, `fav-${f.id}`);
+  }
   computeEvaluations();
 }
 
@@ -1324,6 +1402,8 @@ function computeEvaluations() {
   }
   state.userEvaluation = state.userReading ? evaluate(state.userReading) : null;
   state.searchEvaluation = state.searchReading ? evaluate(state.searchReading) : null;
+  state.favEvaluations = {};
+  for (const id of Object.keys(state.favReadings)) state.favEvaluations[id] = evaluate(state.favReadings[id]);
 }
 
 /**
@@ -1405,6 +1485,136 @@ function runTests() {
     t('門檻：5.1 km 標示附近無測站', at(5.1).nearby, false);
     t('門檻：7.9 km 熱力圖仍上色', at(7.9).heatBlank, false);
     t('門檻：8.1 km 熱力圖留白', at(8.1).heatBlank, true);
+  }
+  // ---- 我的最愛：資料層（用假的儲存空間，不會動到真正的最愛）----
+  {
+    const mem = () => { const m = {}; return { m, getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); } }; };
+    const stA = mem();
+    const fs = createFavStore(stA).load();
+    t('最愛：初始為空', fs.items.length, 0);
+    t('最愛：加入內建跑點', fs.addSpot(2).ok, true);
+    t('最愛：內建跑點沿用跑點名稱（只存 spotId）', fs.items[0].name === undefined && fs.items[0].spotId === 2, true);
+    t('最愛：重複加入同一跑點被拒', fs.addSpot(2).code, 'exists');
+    t('最愛：不存在的跑點被拒', fs.addSpot(999).ok, false);
+    const taipei101 = { lat: 25.0338, lng: 121.5645, sub: '信義區' };
+    t('命名：空白被拒', fs.addPlace({ ...taipei101, name: '' }).code, 'name');
+    t('命名：只有空白被拒', fs.addPlace({ ...taipei101, name: '   ' }).message, '請輸入名稱');
+    t('命名：21 字被拒', fs.addPlace({ ...taipei101, name: '一二三四五六七八九十一二三四五六七八九十一' }).message, '名稱最多 20 字');
+    t('命名：失敗時不會多出項目', fs.items.length, 1);
+    const ok20 = fs.addPlace({ ...taipei101, name: '一二三四五六七八九十一二三四五六七八九十' });
+    t('命名：剛好 20 字可加入', ok20.ok, true);
+    t('命名：20 個 emoji 也算 20 字', validateFavName('😀'.repeat(20)).ok, true);
+    t('命名：21 個 emoji 被拒', validateFavName('😀'.repeat(21)).ok, false);
+    t('命名：頭尾空白會去掉', validateFavName('  家附近  ').name, '家附近');
+    t('最愛：市界外被拒（台中車站）', fs.addPlace({ lat: 24.137, lng: 120.687, name: '台中', sub: '' }).message, '目前僅支援台北市');
+    t('最愛：已儲存到儲存空間', JSON.parse(stA.m[FAV.key]).items.length, 2);
+    t('最愛：儲存格式含版本號', JSON.parse(stA.m[FAV.key]).v, 1);
+    t('最愛：改名成功', fs.rename(ok20.item.id, '家附近').item.name, '家附近');
+    t('最愛：改名空白被拒', fs.rename(ok20.item.id, ' ').code, 'name');
+    t('最愛：改名失敗時名稱不變', fs.get(ok20.item.id).name, '家附近');
+    t('最愛：內建跑點不能改名', fs.rename('spot-2', '別名').ok, false);
+    fs.addPlace({ lat: 25.0267, lng: 121.5435, name: '公司', sub: '大安區' });
+    fs.addSpot(1); fs.addSpot(3);
+    t('最愛：滿 5 個', fs.items.length, 5);
+    t('最愛：isFull', fs.isFull(), true);
+    const sixth = fs.addSpot(4);
+    t('最愛：第 6 個被拒', sixth.ok, false);
+    t('最愛：已滿訊息', sixth.message, '最愛已滿（5 個），請先移除一個');
+    t('最愛：已滿時自選點位也被拒', fs.addPlace({ ...taipei101, name: '第六個' }).code, 'full');
+    const names = fs.items.map((x) => x.id);
+    const reload = createFavStore(stA).load();
+    t('最愛：重新載入後內容與順序相同', reload.items.map((x) => x.id).join(), names.join());
+    t('最愛：重新載入保留改名', reload.items.find((x) => x.kind === 'place').name, '家附近');
+    t('最愛：移除成功', fs.remove('spot-1').ok, true);
+    t('最愛：移除後可再加入', fs.addSpot(4).ok, true);
+    t('最愛：移除不存在的項目', fs.remove('nope').ok, false);
+    // 儲存失敗：資料留在記憶體，並回報 saved:false
+    const bad = { getItem: () => null, setItem: () => { throw new Error('quota'); } };
+    const fb = createFavStore(bad).load();
+    const rb = fb.addSpot(1);
+    t('儲存失敗：仍加入記憶體', rb.ok && fb.items.length === 1, true);
+    t('儲存失敗：回報未保存', rb.saved, false);
+    t('儲存失敗：storageOk 為 false', fb.storageOk, false);
+    const fn = createFavStore(null).load();
+    t('沒有儲存空間：可用但無法保存', fn.addSpot(1).saved === false && fn.items.length === 1, true);
+    t('讀取例外：不拋錯、視為沒有最愛', createFavStore({ getItem: () => { throw new Error('denied'); }, setItem() {} }).load().items.length, 0);
+    // 毀損 / 版本不符 / 無效項目
+    const put = (v) => { const m = mem(); m.m[FAV.key] = typeof v === 'string' ? v : JSON.stringify(v); return m; };
+    t('載入：JSON 毀損 → 空', createFavStore(put('{oops')).load().items.length, 0);
+    t('載入：版本不符 → 空', createFavStore(put({ v: 99, items: [{ kind: 'spot', spotId: 1 }] })).load().items.length, 0);
+    const mixed = createFavStore(put({ v: 1, items: [
+      { kind: 'spot', spotId: 1 }, { kind: 'spot', spotId: 999 }, { kind: 'spot', spotId: 1 },
+      { kind: 'place', id: 'p-a', name: '好', lat: 25.0338, lng: 121.5645, sub: '' },
+      { kind: 'place', id: 'p-b', name: '', lat: 25.0338, lng: 121.5645 },
+      { kind: 'place', id: 'p-c', name: '台中', lat: 24.137, lng: 120.687 },
+      { kind: 'oops' }, null,
+    ] })).load();
+    t('載入：丟棄無效、重複、不存在、市界外的項目', mixed.items.map((x) => x.id).join(), 'spot-1,p-a');
+  }
+  // ---- 我的最愛：介面流程（暫時換成假的儲存空間，結束後還原）----
+  if (state.data && state.dataMode !== 'live') {
+    const realStore = favStore, realWarned = favWarned;
+    const keep = { sel: state.selectedId, focus: state.cardFocus, place: state.searchPlace, favFocus: state.favFocusId };
+    const m = {};
+    favStore = createFavStore({ getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); } }).load();
+    try {
+      clearSelection(); state.favEditing = null; render();
+      const favsText = () => document.querySelector('.js-favs').innerText;
+      t('最愛介面：沒有最愛時的提示', favsText().includes('點資訊卡上的 ☆，把常去的地點加入最愛'), true);
+      t('最愛介面：預設仍顯示目前位置／提示（不是最愛）', state.cardFocus, null);
+      selectSpot(2);
+      t('最愛介面：跑點資訊卡有 ☆（未加入）', document.querySelector('.js-card .fav-btn').getAttribute('aria-pressed'), 'false');
+      toggleFavoriteFromCard('spot:2');
+      t('最愛介面：加入跑點後出現在清單', favsText().includes('大佳河濱公園'), true);
+      t('最愛介面：清單顯示燈號文字', favsText().includes(STATUS_META[getSpotStatus(2)].label), true);
+      t('最愛介面：跑點標記加小星號', !!spotMarkers.get(2).getElement().querySelector('.fav-badge'), true);
+      t('最愛介面：卡片變 ★', document.querySelector('.js-card .fav-btn').getAttribute('aria-pressed'), 'true');
+      // 地圖選點 → 命名 → 加入
+      window.L.DomUtil && map.fire('contextmenu', { latlng: window.L.latLng(25.0338, 121.5645), originalEvent: { pointerType: 'mouse', preventDefault() {} } });
+      toggleFavoriteFromCard('temp');
+      t('最愛介面：自選點位加入前要先命名（表單出現）', !!document.querySelector('.js-card .fav-name-input'), true);
+      t('最愛介面：輸入框預設空白', document.querySelector('.js-card .fav-name-input').value, '');
+      t('最愛介面：placeholder 提示', document.querySelector('.js-card .fav-name-input').placeholder.includes('家附近'), true);
+      submitFavForm();
+      t('最愛介面：空白名稱顯示錯誤、不加入', favStore.items.length === 1 && document.querySelector('.js-card .fav-error').textContent === '請輸入名稱', true);
+      state.favEditing.value = '家附近'; submitFavForm();
+      t('最愛介面：命名後加入（共 2 個）', favStore.items.length, 2);
+      t('最愛介面：暫時圖釘消失、星形標記常駐', document.querySelectorAll('.search-marker').length === 0 && document.querySelectorAll('.fav-marker').length === 1, true);
+      t('最愛介面：資訊卡標題為自訂名稱', document.querySelector('.js-card .card-title').textContent, '家附近');
+      t('最愛介面：自選點位卡片有四項數值', document.querySelectorAll('.js-card .metric').length >= 4, true);
+      t('最愛介面：自選點位卡片有「附近跑點」', document.querySelector('.js-card .rec-title').textContent, '附近跑點');
+      t('最愛介面：自選點位納入氣象批次查詢', weatherPoints().some((p) => p.key.startsWith('fav-')), true);
+      t('最愛介面：依加入順序排列', [...document.querySelectorAll('.js-favs')[0].querySelectorAll('.name')].map((x) => x.textContent.trim()).join(), '大佳河濱公園,家附近');
+      // 改名
+      state.favEditing = { mode: 'rename', id: state.favFocusId, value: '新名稱', error: '' }; submitFavForm();
+      t('最愛介面：改名後清單更新', favsText().includes('新名稱'), true);
+      // 市界外
+      map.fire('contextmenu', { latlng: window.L.latLng(24.137, 120.687), originalEvent: { pointerType: 'mouse', preventDefault() {} } });
+      t('最愛介面：市界外的 ☆ 為停用外觀', document.querySelector('.js-card .fav-btn').getAttribute('aria-disabled'), 'true');
+      toggleFavoriteFromCard('outside');
+      t('最愛介面：市界外提示「目前僅支援台北市」', document.getElementById('toast').textContent, '目前僅支援台北市');
+      t('最愛介面：市界外不會加入', favStore.items.length, 2);
+      // 滿 5 個
+      favStore.addSpot(1); favStore.addSpot(3); favStore.addSpot(4);
+      selectSpot(5);
+      t('最愛介面：已滿（5 個）', favStore.items.length, 5);
+      t('最愛介面：已滿時 ☆ 停用', document.querySelector('.js-card .fav-btn').getAttribute('aria-disabled'), 'true');
+      t('最愛介面：已滿提示文字', document.querySelector('.js-card').innerText.includes('最愛已滿（5 個），請先移除一個'), true);
+      toggleFavoriteFromCard('spot:5');
+      t('最愛介面：已滿時點 ☆ 不會加入', favStore.items.length, 5);
+      t('最愛介面：已滿時 toast 提示', document.getElementById('toast').textContent, '最愛已滿（5 個），請先移除一個');
+      // 移除
+      toggleFavoriteFromCard('spot:2');
+      t('最愛介面：移除跑點', favStore.items.length === 4 && !favStore.hasSpot(2), true);
+      t('最愛介面：移除後小星號消失', !!spotMarkers.get(2).getElement().querySelector('.fav-badge'), false);
+      t('最愛介面：移除後可再加入（☆ 恢復）', document.querySelector('.js-card .fav-btn') !== null, true);
+    } finally {
+      favStore = realStore; favWarned = realWarned;
+      state.favEditing = null; state.favFocusId = keep.favFocus;
+      clearSelection();
+      state.selectedId = keep.sel; state.cardFocus = keep.focus; state.searchPlace = keep.place;
+      render();
+    }
   }
   // ---- 推薦規則依對象區分 ----
   {
@@ -1595,11 +1805,11 @@ function updateLabelLayer() {
 }
 
 /** 依狀態產生跑點標記圖示（狀態色圓形＋白色狀態圖示） */
-function spotIcon(status, selected) {
+function spotIcon(status, selected, fav = false) {
   const meta = STATUS_META[status];
   return L.divIcon({
     className: `spot-marker ${meta.cls}${selected ? ' is-selected' : ''}`,
-    html: `<div class="pin">${iconSvg(meta.icon)}</div>`,
+    html: `<div class="pin">${iconSvg(meta.icon)}${fav ? `<span class="fav-badge">${iconSvg('i-star')}</span>` : ''}</div>`,
     iconSize: [32, 32],
     iconAnchor: [16, 16],
   });
@@ -1619,12 +1829,13 @@ function renderMarkers() {
       marker.bindTooltip(spot.name, { direction: 'top', offset: [0, -18] });
       spotMarkers.set(spot.id, marker);
     }
-    marker.setIcon(spotIcon(status, selected));
+    const isFav = favStore.hasSpot(spot.id);
+    marker.setIcon(spotIcon(status, selected, isFav));
     marker.setTooltipContent(spotTooltipHtml(spot));
     marker.setZIndexOffset(selected ? 1000 : 0);
     // 標記的無障礙名稱同時包含狀態文字
     const el = marker.getElement();
-    if (el) el.setAttribute('aria-label', `${spot.name}，${STATUS_META[status].label}`);
+    if (el) el.setAttribute('aria-label', `${spot.name}，${STATUS_META[status].label}${isFav ? '，我的最愛' : ''}`);
   }
 }
 
@@ -1698,7 +1909,11 @@ const state = {
   searchPlace: null,    // 搜尋到的地點 { name, sub, lat, lng, inTaipei }
   searchReading: null,  // 搜尋位置的四項指標（僅台北市內）
   searchEvaluation: null,
-  cardFocus: null,      // 資訊卡目前對象：'spot' | 'search' | null（null＝目前位置）
+  cardFocus: null,      // 資訊卡目前對象：'spot' | 'search' | 'fav' | null（null＝目前位置）
+  favFocusId: null,     // cardFocus === 'fav' 時的最愛自選點位 id
+  favEditing: null,     // 命名 / 改名表單：{ mode: 'add' | 'rename', id?, value, error }
+  favReadings: {},      // 最愛自選點位 id → 四項指標
+  favEvaluations: {},   // 最愛自選點位 id → 判定結果
   monitor: { on: false, perm: 'default', permReason: '', lastStatus: null, msg: '', testMsg: '' }, // 背景監測（預設關閉）
   geoFailed: false,     // 定位失敗（供資訊卡提示「未取得定位」）
   sheetExpanded: false, // 窄螢幕 Bottom Sheet 是否展開
@@ -1781,7 +1996,9 @@ function render() {
   renderList();
   renderUserMarker();
   renderSourceStatus();
+  renderFavMarkers();
   renderCards();
+  renderFavorites();
 }
 
 /** 目前是否為窄螢幕版面（< 768px） */
@@ -1808,6 +2025,7 @@ function selectSpot(id, { pan = true } = {}) {
   if (!spot) return;
   state.selectedId = id;
   state.cardFocus = 'spot';
+  state.favEditing = null;
   setSheet(false);
   if (pan) flyToPoint(spot.lat, spot.lng, CONFIG.SPOT_ZOOM);
   render();
@@ -1816,6 +2034,8 @@ function selectSpot(id, { pan = true } = {}) {
 /** 取消選取：移除搜尋標記，資訊卡回到「目前位置」（Leaflet 拖曳地圖不會觸發 click，不會誤關） */
 function clearSelection() {
   if (state.selectedId === null && !state.searchPlace && state.cardFocus === null) return;
+  state.favEditing = null;
+  state.favFocusId = null;
   const outside = state.searchPlace && !state.searchPlace.inTaipei && state.searchPlace.kind !== 'pick'; // 地圖選點沒有移動地圖，不必飛回
   state.selectedId = null;
   state.searchPlace = null;
@@ -1833,6 +2053,7 @@ function selectSearchPlace(place) {
   if (state.data) delete state.data.wx.byKey.search;
   state.selectedId = null;
   state.cardFocus = 'search';
+  state.favEditing = null;
   setSheet(false);
   renderSearchMarker();
   if (place.kind === 'pick') {
@@ -1853,17 +2074,22 @@ function selectSearchPlace(place) {
  * - Mock：沿用最近跑點的情境值。用序號避免快速連續選點時舊結果蓋掉新結果。
  */
 let placeWxSeq = 0;
+/** 取得單一座標的氣象（即時：單點請求；失敗回傳全 null。Mock：沿用最近跑點的情境值） */
+function fetchPointWeather(key, lat, lng) {
+  const pt = { key, lat, lng };
+  if (state.data.wx.mode === 'live') { // 即時：回傳 Promise
+    return loadWeatherLive([pt]).then((r) => r.byKey[key]).catch(() => ({ rain: null, uvi: null, feels: null }));
+  }
+  // Mock：同步回傳（不發請求，結果立即可用）
+  return buildMockWeather(state.data.mode === 'live' ? 'normal' : state.data.mode, [pt])[key];
+}
+
 async function ensureSearchWeather() {
   const place = state.searchPlace;
   if (!place || !place.inTaipei || !state.data) return;
-  const pt = { key: 'search', lat: place.lat, lng: place.lng };
   const seq = ++placeWxSeq;
-  let wx;
-  if (state.data.wx.mode === 'live') {
-    try { wx = (await loadWeatherLive([pt])).byKey.search; } catch (e) { wx = { rain: null, uvi: null, feels: null }; }
-  } else {
-    wx = buildMockWeather(state.data.mode === 'live' ? 'normal' : state.data.mode, [pt]).search;
-  }
+  const got = fetchPointWeather('search', place.lat, place.lng);
+  const wx = got && typeof got.then === 'function' ? await got : got; // Mock 時不經過 await，結果同步套用
   if (seq !== placeWxSeq || state.searchPlace !== place || !state.data) return;
   state.data.wx.byKey.search = wx;
   computeReadings();
@@ -1925,7 +2151,7 @@ function metricHtml(ind, reading, ev) {
  * 資訊卡內容。
  * @param {{title:string, sub:string, ev:object, reading:object, closable:boolean, ref:{lat:number,lng:number,excludeId:?number,kind:'spot'|'place'}}} o
  */
-function cardHtml({ title, sub, ev, reading, closable, ref }) {
+function cardHtml({ title, sub, ev, reading, closable, ref, actions = '', below = '', favNote = '' }) {
   const status = ev.status;
   const meta = STATUS_META[status];
   const notes = [];
@@ -1938,12 +2164,13 @@ function cardHtml({ title, sub, ev, reading, closable, ref }) {
     <div class="card-head">
       <span class="status-dot">${iconSvg(meta.icon)}</span>
       <div class="titles"><h2 class="card-title">${escapeHtml(title)}</h2><p class="card-sub">${escapeHtml(sub)}</p></div>
-      ${closable ? `<button type="button" class="card-close" data-action="clear-selection" aria-label="取消選取，改看目前位置">${iconSvg('i-x')}</button>` : ''}
+      <div class="card-actions">${actions}${closable ? `<button type="button" class="card-close" data-action="clear-selection" aria-label="取消選取，改看目前位置">${iconSvg('i-x')}</button>` : ''}</div>
     </div>
+    ${below}
     <span class="chip">${iconSvg(meta.icon)}${meta.label}</span>
     <p class="card-advice">${escapeHtml(adviceFor(ev))}</p>
     <div class="metrics">${INDICATORS.map((ind) => metricHtml(ind, reading, ev)).join('')}</div>
-    ${notes.map((n) => `<p class="card-note">${escapeHtml(n)}</p>`).join('')}
+    ${notes.concat(favNote ? [favNote] : []).map((n) => `<p class="card-note">${escapeHtml(n)}</p>`).join('')}
     ${ref ? recommendHtml(recommendSpots(ref.lat, ref.lng, status, ref.excludeId, ref.kind), ref.kind) : ''}
     <p class="card-foot">更新 ${state.data ? formatTaipei(state.data.updatedAt) : '—'}・${escapeHtml(src.label)}</p>
     ${closable ? '' : `<p class="card-tip">${pickTip()}</p>`}
@@ -1960,13 +2187,37 @@ function outOfScopeCardHtml(place) {
     <div class="card-head">
       <span class="status-dot">${iconSvg('i-info')}</span>
       <div class="titles"><h2 class="card-title">${escapeHtml(place.name)}</h2><p class="card-sub">${escapeHtml(place.sub || '搜尋位置')}</p></div>
-      <button type="button" class="card-close" data-action="clear-selection" aria-label="取消選取，回到台北">${iconSvg('i-x')}</button>
+      <div class="card-actions">${favBtnHtml('outside', false, FAV_MSG.outside)}<button type="button" class="card-close" data-action="clear-selection" aria-label="取消選取，回到台北">${iconSvg('i-x')}</button></div>
     </div>
     <p class="card-advice">目前僅支援台北市</p>
   </article>`;
 }
 
-/** 依狀態決定資訊卡：搜尋位置 → 選取的跑點 → 目前位置 → 提示 */
+/** 星形按鈕：加入 / 移除我的最愛；reason 有值且尚未加入時為「停用」外觀（仍可點擊以顯示原因） */
+function favBtnHtml(target, on, reason = '') {
+  const off = !on && !!reason;
+  const label = on ? '從我的最愛移除' : (reason || '加入我的最愛');
+  return `<button type="button" class="fav-btn${off ? ' is-disabled' : ''}" data-action="toggle-fav" data-fav-target="${target}"
+    aria-pressed="${on}"${off ? ' aria-disabled="true"' : ''} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${iconSvg('i-star')}</button>`;
+}
+
+/** 命名 / 改名表單（加入搜尋地點或地圖選點時必填；輸入框預設空白，只用 placeholder 提示） */
+function favFormHtml() {
+  const ed = state.favEditing;
+  if (!ed) return '';
+  const len = [...String(ed.value)].length;
+  return `<form class="fav-form" data-fav-form novalidate>
+    <input class="fav-name-input" type="text" maxlength="${FAV.nameMax}" autocomplete="off" enterkeyhint="done"
+      placeholder="${ed.mode === 'add' ? '為這個地點命名（例如：家附近）' : '輸入新名稱'}" value="${escapeHtml(ed.value)}"
+      aria-label="${ed.mode === 'add' ? '最愛名稱' : '新名稱'}（1 到 ${FAV.nameMax} 字）">
+    <div class="fav-form-row"><span class="fav-count">${len}/${FAV.nameMax}</span>
+      <button type="submit" class="btn">${ed.mode === 'add' ? '加入最愛' : '儲存名稱'}</button>
+      <button type="button" class="link-btn" data-action="fav-cancel">取消</button></div>
+    <p class="fav-error" role="alert">${escapeHtml(ed.error || '')}</p>
+  </form>`;
+}
+
+/** 依狀態決定資訊卡：搜尋位置 → 最愛自選點位 → 選取的跑點 → 目前位置 → 提示 */
 function infoCardHtml() {
   const hint = (msg) => `<div class="card card-hint"><svg class="icon"><use href="#i-info"/></svg>${msg}</div>`;
   if (!state.data) return hint('資料載入中…');
@@ -1974,14 +2225,28 @@ function infoCardHtml() {
   if (state.cardFocus === 'search' && place) {
     if (!place.inTaipei) return outOfScopeCardHtml(place);
     if (!state.searchEvaluation) return hint('資料載入中…');
+    const full = favStore.isFull();
     return cardHtml({ title: place.name, sub: place.sub || '搜尋位置', ev: state.searchEvaluation, reading: state.searchReading,
-                      closable: true, ref: { lat: place.lat, lng: place.lng, excludeId: null, kind: 'place' } });
+                      closable: true, ref: { lat: place.lat, lng: place.lng, excludeId: null, kind: 'place' },
+                      actions: favBtnHtml('temp', false, full ? FAV_MSG.full : ''), favNote: full ? FAV_MSG.full : '',
+                      below: state.favEditing && state.favEditing.mode === 'add' ? favFormHtml() : '' });
+  }
+  const fav = state.cardFocus === 'fav' ? favStore.get(state.favFocusId) : null;
+  if (fav && fav.kind === 'place') {
+    const ev = state.favEvaluations[fav.id];
+    if (!ev) return hint('資料載入中…');
+    return cardHtml({ title: fav.name, sub: fav.sub || '我的最愛', ev, reading: state.favReadings[fav.id], closable: true,
+                      ref: { lat: fav.lat, lng: fav.lng, excludeId: null, kind: 'place' },
+                      actions: `${favBtnHtml(`fav:${fav.id}`, true)}<button type="button" class="card-rename" data-action="fav-rename" aria-label="改名" title="改名">${iconSvg('i-edit')}</button>`,
+                      below: state.favEditing && state.favEditing.mode === 'rename' ? favFormHtml() : '' });
   }
   const spot = RUN_SPOTS.find((x) => x.id === state.selectedId);
   if (state.cardFocus === 'spot' && spot && state.evaluations[spot.id]) {
+    const on = favStore.hasSpot(spot.id), full = !on && favStore.isFull();
     return cardHtml({ title: spot.name, sub: `${spot.district}・${SPOT_TYPE_LABEL[spot.type] || ''}`,
                       ev: state.evaluations[spot.id], reading: state.readings[spot.id], closable: true,
-                      ref: { lat: spot.lat, lng: spot.lng, excludeId: spot.id, kind: 'spot' } });
+                      ref: { lat: spot.lat, lng: spot.lng, excludeId: spot.id, kind: 'spot' },
+                      actions: favBtnHtml(`spot:${spot.id}`, on, full ? FAV_MSG.full : ''), favNote: full ? FAV_MSG.full : '' });
   }
   if (state.userPos && state.userEvaluation) {
     return cardHtml({ title: '目前位置', sub: inBBox(state.userPos.lat, state.userPos.lng) ? '依附近測站與氣象估算' : '不在台北市範圍內',
@@ -1993,7 +2258,16 @@ function infoCardHtml() {
 
 function renderCards() {
   const html = infoCardHtml();
+  // 命名表單開著時資料更新會重繪資訊卡：保留輸入框的焦點與游標位置，避免打字中途被打斷
+  const a = document.activeElement;
+  const inputs = [...document.querySelectorAll('.js-card .fav-name-input')];
+  const idx = a && a.classList && a.classList.contains('fav-name-input') ? inputs.indexOf(a) : -1;
+  const sel = idx >= 0 ? [a.selectionStart, a.selectionEnd] : null;
   document.querySelectorAll('.js-card').forEach((el) => { el.innerHTML = html; });
+  if (idx >= 0) {
+    const el = document.querySelectorAll('.js-card .fav-name-input')[idx];
+    if (el) { el.focus(); try { el.setSelectionRange(sel[0], sel[1]); } catch (e) { /* 略過 */ } }
+  }
 }
 
 /* =====================================================================
@@ -2280,6 +2554,7 @@ function toggleSettings(open) {
 function bindUI() {
   // 列表點擊、資訊卡關閉鈕、資料模式切換（事件委派；側邊欄與 Sheet 各有一份）
   document.addEventListener('click', (e) => {
+    if (e.target.closest('.fav-item')) return; // 最愛列由 initFavorites 處理
     const item = e.target.closest('.spot-item');
     if (item) { selectSpot(Number(item.dataset.id)); return; }
     if (e.target.closest('[data-action="clear-selection"]')) { clearSelection(); return; }
@@ -2614,6 +2889,343 @@ function initMapPicking() {
 }
 
 /* =====================================================================
+   §8-5 我的最愛
+   - 可加入：內建跑點、搜尋地點、地圖選點（台北市內）；不可加入：目前位置（會移動）、台北市界外。
+   - 上限 5 個；自選點位需命名（1–20 字，加入時輸入框預設空白），之後可改名；內建跑點沿用跑點名稱。
+   - 儲存於 localStorage（鍵 safeair.favorites.v1，內容含版本號 v，日後搬到帳號系統時用來轉換格式）；
+     儲存空間不可用（無痕 / 停用）時退回記憶體並提示「最愛無法保存」。
+   - 最愛只存在這台裝置與這個瀏覽器；iPhone 主畫面 App 與 Safari 的 localStorage 是分開的。
+   - 資料層 createFavStore 是純函式風格（儲存空間可注入），runTests 用假的儲存空間測試，不會動到真正的最愛。
+   ===================================================================== */
+const FAV = { key: 'safeair.favorites.v1', version: 1, max: 5, nameMax: 20 };
+const FAV_MSG = {
+  full: `最愛已滿（${FAV.max} 個），請先移除一個`,
+  outside: '目前僅支援台北市',
+  nameEmpty: '請輸入名稱',
+  nameLong: `名稱最多 ${FAV.nameMax} 字`,
+  exists: '已經在我的最愛中',
+  noStorage: '最愛無法保存：此瀏覽器停用了儲存空間，關閉頁面後最愛會消失',
+};
+
+/** 名稱驗證：去頭尾空白後 1–20 字（以字元計，emoji 算一個字） */
+function validateFavName(raw) {
+  const name = String(raw === null || raw === undefined ? '' : raw).trim();
+  const len = [...name].length;
+  if (len === 0) return { ok: false, error: FAV_MSG.nameEmpty };
+  if (len > FAV.nameMax) return { ok: false, error: FAV_MSG.nameLong };
+  return { ok: true, name };
+}
+
+/** 取得可用的 localStorage；不可用（無痕、停用、拋例外）回傳 null */
+function getLocalStorage() {
+  try {
+    const st = window.localStorage;
+    st.setItem('__safeair_probe__', '1'); st.removeItem('__safeair_probe__');
+    return st;
+  } catch (e) { return null; }
+}
+
+/**
+ * 最愛資料層。storage 為 { getItem, setItem }（或 null＝不可用，只存記憶體）。
+ * 每個操作回傳 { ok, code, message, item, saved }：saved 為 false 表示寫入儲存空間失敗（資料仍在記憶體）。
+ */
+function createFavStore(storage) {
+  const store = { items: [], storageOk: !!storage };
+  const persist = () => {
+    if (!storage) { store.storageOk = false; return false; }
+    try {
+      storage.setItem(FAV.key, JSON.stringify({ v: FAV.version, savedAt: new Date().toISOString(), items: store.items }));
+      store.storageOk = true;
+      return true;
+    } catch (e) { store.storageOk = false; return false; }
+  };
+  const fail = (code, message) => ({ ok: false, code, message, saved: true });
+  const done = (item) => ({ ok: true, item, saved: persist() });
+  /** 載入時檢查每一筆：格式不對、跑點已不存在、座標在市界外者丟棄 */
+  const sanitize = (it) => {
+    if (!it || typeof it !== 'object') return null;
+    if (it.kind === 'spot') {
+      return Number.isInteger(it.spotId) && RUN_SPOTS.some((x) => x.id === it.spotId)
+        ? { id: `spot-${it.spotId}`, kind: 'spot', spotId: it.spotId } : null;
+    }
+    if (it.kind === 'place') {
+      const nm = validateFavName(it.name);
+      const lat = toNum(it.lat), lng = toNum(it.lng);
+      if (!nm.ok || lat === null || lng === null || !pointInPolygon(lat, lng) || typeof it.id !== 'string' || !it.id || it.id.startsWith('spot-')) return null;
+      return { id: it.id, kind: 'place', name: nm.name, lat, lng, sub: String(it.sub || '').slice(0, 30) };
+    }
+    return null;
+  };
+  store.load = () => {
+    store.items = [];
+    if (!storage) return store;
+    let raw = null;
+    try { raw = storage.getItem(FAV.key); } catch (e) { store.storageOk = false; return store; }
+    if (!raw) return store;
+    try {
+      const obj = JSON.parse(raw);
+      if (!obj || obj.v !== FAV.version || !Array.isArray(obj.items)) return store; // 版本不符：忽略（日後在此加入版本轉換）
+      const seen = new Set();
+      for (const it of obj.items) {
+        const c = sanitize(it);
+        if (c && !seen.has(c.id)) { seen.add(c.id); store.items.push(c); if (store.items.length >= FAV.max) break; }
+      }
+    } catch (e) { store.items = []; } // 內容毀損：當作沒有最愛
+    return store;
+  };
+  store.isFull = () => store.items.length >= FAV.max;
+  store.get = (id) => store.items.find((x) => x.id === id) || null;
+  store.hasSpot = (spotId) => store.items.some((x) => x.kind === 'spot' && x.spotId === spotId);
+  store.addSpot = (spotId) => {
+    if (!RUN_SPOTS.some((x) => x.id === spotId)) return fail('invalid', '找不到這個跑點');
+    if (store.hasSpot(spotId)) return fail('exists', FAV_MSG.exists);
+    if (store.isFull()) return fail('full', FAV_MSG.full);
+    const item = { id: `spot-${spotId}`, kind: 'spot', spotId };
+    store.items.push(item);
+    return done(item);
+  };
+  store.addPlace = ({ name, lat, lng, sub }) => {
+    if (!pointInPolygon(lat, lng)) return fail('outside', FAV_MSG.outside);
+    if (store.isFull()) return fail('full', FAV_MSG.full);
+    const nm = validateFavName(name);
+    if (!nm.ok) return fail('name', nm.error);
+    const item = { id: `p-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind: 'place', name: nm.name, lat, lng, sub: String(sub || '').slice(0, 30) };
+    store.items.push(item);
+    return done(item);
+  };
+  store.rename = (id, name) => {
+    const it = store.get(id);
+    if (!it || it.kind !== 'place') return fail('invalid', '只有自選點位可以改名');
+    const nm = validateFavName(name);
+    if (!nm.ok) return fail('name', nm.error);
+    it.name = nm.name;
+    return done(it);
+  };
+  store.remove = (id) => {
+    const i = store.items.findIndex((x) => x.id === id);
+    if (i < 0) return { ok: false, code: 'missing', message: '不在我的最愛中', saved: true };
+    const [item] = store.items.splice(i, 1);
+    return done(item);
+  };
+  return store;
+}
+
+let favStore = createFavStore(getLocalStorage()).load();
+let favWarned = false; // 「最愛無法保存」只提示一次
+
+/** 最愛的名稱 / 副標 / 燈號 / 座標（跑點取自 RUN_SPOTS；自選點位取自儲存的資料） */
+function favInfo(f) {
+  if (f.kind === 'spot') {
+    const sp = RUN_SPOTS.find((x) => x.id === f.spotId);
+    return { name: sp.name, sub: `${sp.district}・${SPOT_TYPE_LABEL[sp.type] || ''}`, lat: sp.lat, lng: sp.lng, status: getSpotStatus(sp.id) };
+  }
+  const ev = state.favEvaluations[f.id];
+  return { name: f.name, sub: f.sub || '自選點位', lat: f.lat, lng: f.lng, status: ev ? ev.status : 'unknown' };
+}
+
+/** 儲存失敗時提示一次，並在最愛區塊 / 設定選單顯示常駐說明 */
+function noteFavSave(result) {
+  if (result && result.saved === false && !favWarned) { favWarned = true; showToast(FAV_MSG.noStorage, 6000, true); }
+}
+function renderFavWarn() {
+  document.querySelectorAll('.js-fav-warn').forEach((el) => { el.hidden = favStore.storageOk; el.textContent = favStore.storageOk ? '' : FAV_MSG.noStorage; });
+}
+
+/** 「我的最愛」區塊（側邊欄與 Bottom Sheet 各一份）：燈號（色彩＋圖示＋文字）、名稱、與使用者的距離；依加入順序 */
+function renderFavorites() {
+  const items = favStore.items;
+  const pos = state.userPos;
+  const head = `<h2 class="sb-section-title">我的最愛 <span class="fav-count-badge num">${items.length}/${FAV.max}</span></h2>`;
+  let body;
+  if (!items.length) {
+    body = '<p class="fav-empty">點資訊卡上的 ☆，把常去的地點加入最愛</p>';
+  } else {
+    body = `<ul class="spot-list fav-list">${items.map((f) => {
+      const info = favInfo(f), meta = STATUS_META[info.status];
+      const dist = pos ? `<span class="dist num">${formatKm(haversine(pos.lat, pos.lng, info.lat, info.lng))}</span>` : '';
+      const cur = (state.cardFocus === 'spot' && f.kind === 'spot' && state.selectedId === f.spotId) || (state.cardFocus === 'fav' && state.favFocusId === f.id);
+      return `<li><button type="button" class="fav-item spot-item-like ${meta.cls}" data-fav="${f.id}" aria-current="${cur}">
+        <span class="status-dot" title="${meta.label}">${iconSvg(meta.icon)}</span>
+        <span class="meta"><span class="name">${iconSvg('i-star')}${escapeHtml(info.name)}</span>
+          <span class="sub"><span class="st-label">${meta.label}</span><span class="where">・${escapeHtml(info.sub)}</span></span></span>${dist}</button></li>`;
+    }).join('')}</ul>`;
+  }
+  const note = '<p class="fav-note fav-block-note">最愛只存在這台裝置與這個瀏覽器；iPhone 主畫面 App 與 Safari 的最愛是分開的。</p>'
+    + (favStore.storageOk ? '' : `<p class="fav-warn">${FAV_MSG.noStorage}</p>`);
+  const html = head + body + note;
+  document.querySelectorAll('.js-favs').forEach((el) => { el.innerHTML = html; });
+  renderFavWarn();
+}
+
+/** 自選點位的星形標記（常駐顯示；右下角小圓點為目前燈號） */
+const favMarkers = new Map();
+function renderFavMarkers() {
+  const want = new Set();
+  for (const f of favStore.items) {
+    if (f.kind !== 'place') continue;
+    want.add(f.id);
+    const info = favInfo(f), meta = STATUS_META[info.status];
+    const selected = state.cardFocus === 'fav' && state.favFocusId === f.id;
+    const icon = L.divIcon({
+      className: `fav-marker ${meta.cls}${selected ? ' is-selected' : ''}`,
+      html: `<div class="star"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-star"/></svg><span class="star-dot">${iconSvg(meta.icon)}</span></div>`,
+      iconSize: [38, 38], iconAnchor: [19, 19],
+    });
+    let m = favMarkers.get(f.id);
+    if (!m) {
+      m = L.marker([f.lat, f.lng], { icon, title: f.name, alt: f.name, keyboard: true, riseOnHover: true, zIndexOffset: 500 }).addTo(map);
+      m.on('click', () => selectFavPlace(f.id));
+      favMarkers.set(f.id, m);
+    }
+    m.setLatLng([f.lat, f.lng]);
+    m.setIcon(icon);
+    m.setZIndexOffset(selected ? 1100 : 500);
+    m.unbindTooltip();
+    m.bindTooltip(`${escapeHtml(f.name)}｜${meta.label}`, { direction: 'top', offset: [0, -20] });
+    const el = m.getElement();
+    if (el) el.setAttribute('aria-label', `我的最愛：${f.name}，${meta.label}`);
+  }
+  for (const [id, m] of favMarkers) {
+    if (!want.has(id)) { map.removeLayer(m); favMarkers.delete(id); }
+  }
+}
+
+/** 選取最愛的自選點位：平移並開啟資訊卡 */
+function selectFavPlace(id) {
+  const f = favStore.get(id);
+  if (!f || f.kind !== 'place') return;
+  state.cardFocus = 'fav';
+  state.favFocusId = id;
+  state.selectedId = null;
+  state.favEditing = null;
+  setSheet(false);
+  flyToPoint(f.lat, f.lng, CONFIG.SPOT_ZOOM);
+  render();
+}
+
+/** 點「最愛」清單的一列 */
+function selectFavorite(id) {
+  const f = favStore.get(id);
+  if (!f) return;
+  if (f.kind === 'spot') selectSpot(f.spotId); else selectFavPlace(id);
+}
+
+function focusFavInput() {
+  const el = [...document.querySelectorAll('.js-card .fav-name-input')].find((x) => x.offsetParent !== null);
+  if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (e) { /* 略過 */ } }
+}
+
+/** 資訊卡上的 ☆／★：target 為 'spot:ID'、'fav:ID'、'temp'（搜尋地點 / 地圖選點）、'outside'（台北市界外） */
+function toggleFavoriteFromCard(target) {
+  if (target === 'outside') { showToast(FAV_MSG.outside); return; }
+  if (target.startsWith('spot:')) {
+    const spotId = Number(target.slice(5)), key = `spot-${spotId}`;
+    if (favStore.get(key)) { removeFavorite(key); return; }
+    const r = favStore.addSpot(spotId);
+    if (!r.ok) { showToast(r.message); return; }
+    const sp = RUN_SPOTS.find((x) => x.id === spotId);
+    showToast(`已加入最愛「${sp.name}」`);
+    noteFavSave(r);
+    render();
+    return;
+  }
+  if (target.startsWith('fav:')) { removeFavorite(target.slice(4)); return; }
+  // temp：搜尋地點 / 地圖選點 → 需要先命名
+  const place = state.searchPlace;
+  if (!place || !place.inTaipei) { showToast(FAV_MSG.outside); return; }
+  if (favStore.isFull()) { showToast(FAV_MSG.full); return; }
+  state.favEditing = { mode: 'add', value: '', error: '' };
+  setSheet(true); // 窄螢幕：展開 Sheet，才看得到表單與鍵盤
+  renderCards();
+  focusFavInput();
+}
+
+function removeFavorite(id) {
+  const f = favStore.get(id);
+  if (!f) return;
+  const name = favInfo(f).name;
+  const r = favStore.remove(id);
+  noteFavSave(r);
+  showToast(`已從最愛移除「${name}」`);
+  if (state.cardFocus === 'fav' && state.favFocusId === id) { state.cardFocus = null; state.favFocusId = null; state.favEditing = null; }
+  render();
+}
+
+/** 命名 / 改名表單送出 */
+function submitFavForm() {
+  const ed = state.favEditing;
+  if (!ed) return;
+  if (ed.mode === 'rename') {
+    const r = favStore.rename(ed.id, ed.value);
+    if (!r.ok) { ed.error = r.message; renderCards(); focusFavInput(); return; }
+    noteFavSave(r);
+    state.favEditing = null;
+    showToast(`已改名為「${r.item.name}」`);
+    render();
+    return;
+  }
+  const place = state.searchPlace;
+  if (!place) { state.favEditing = null; render(); return; }
+  const r = favStore.addPlace({ name: ed.value, lat: place.lat, lng: place.lng, sub: districtOf(place.lat, place.lng) });
+  if (!r.ok) { ed.error = r.message; renderCards(); focusFavInput(); return; }
+  noteFavSave(r);
+  // 轉成最愛：沿用剛查到的氣象（不再多打一次請求），移除暫時圖釘，改以常駐的星形標記顯示
+  const key = `fav-${r.item.id}`;
+  const haveWx = state.data && state.data.wx.byKey.search;
+  if (haveWx) state.data.wx.byKey[key] = state.data.wx.byKey.search;
+  state.searchPlace = null; state.searchReading = null; state.searchEvaluation = null;
+  renderSearchMarker();
+  state.favEditing = null;
+  state.cardFocus = 'fav'; state.favFocusId = r.item.id; state.selectedId = null;
+  if (state.data) computeReadings();
+  showToast(`已加入最愛「${r.item.name}」`);
+  render();
+  if (state.data && !haveWx) { // 氣象還沒回來（極少見）：補查
+    Promise.resolve(fetchPointWeather(key, r.item.lat, r.item.lng)).then((wx) => {
+      if (!state.data || !favStore.get(r.item.id)) return;
+      state.data.wx.byKey[key] = wx; computeReadings(); render();
+    });
+  }
+}
+
+/** 綁定最愛相關事件（事件委派） */
+function initFavorites() {
+  document.addEventListener('click', (e) => {
+    const row = e.target.closest('.fav-item');
+    if (row) { selectFavorite(row.dataset.fav); return; }
+    const star = e.target.closest('[data-action="toggle-fav"]');
+    if (star) { toggleFavoriteFromCard(star.dataset.favTarget); return; }
+    if (e.target.closest('[data-action="fav-cancel"]')) { state.favEditing = null; renderCards(); return; }
+    if (e.target.closest('[data-action="fav-rename"]')) {
+      const f = favStore.get(state.favFocusId);
+      if (!f) return;
+      state.favEditing = { mode: 'rename', id: f.id, value: f.name, error: '' }; // 改名時預填目前名稱
+      setSheet(true);
+      renderCards();
+      focusFavInput();
+    }
+  });
+  document.addEventListener('input', (e) => {
+    if (!e.target.classList || !e.target.classList.contains('fav-name-input') || !state.favEditing) return;
+    state.favEditing.value = e.target.value;
+    state.favEditing.error = '';
+    const len = [...e.target.value].length;
+    // 側邊欄與 Sheet 各有一份表單：同步另一份的內容與字數，並清掉錯誤訊息
+    document.querySelectorAll('.js-card .fav-name-input').forEach((el) => { if (el !== e.target) el.value = e.target.value; });
+    document.querySelectorAll('.js-card .fav-count').forEach((el) => { el.textContent = `${len}/${FAV.nameMax}`; });
+    document.querySelectorAll('.js-card .fav-error').forEach((el) => { el.textContent = ''; });
+  });
+  document.addEventListener('submit', (e) => {
+    if (e.target.matches && e.target.matches('[data-fav-form]')) { e.preventDefault(); submitFavForm(); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.favEditing && e.target.classList && e.target.classList.contains('fav-name-input')) {
+      e.stopPropagation(); state.favEditing = null; renderCards();
+    }
+  });
+}
+
+/* =====================================================================
    §9 背景監測與通知
    - 預設關閉；開啟時請求通知權限（被拒絕或不支援 → 只顯示頁面內橫幅，並說明原因）。
    - 每 10 分鐘隨資料更新檢查一次「目前位置」的燈號：綠→黃/紅、黃→紅 時提醒（系統通知＋可關閉的橫幅，
@@ -2843,6 +3455,8 @@ function bootstrap() {
   initMap();
   bindUI();
   initHeatControl();
+  initFavorites();
+  if (!favStore.storageOk) { favWarned = true; showToast(FAV_MSG.noStorage, 6000, true); }
   renderModeSwitch();
   render();
   locateUser({ recenter: true });
@@ -2852,7 +3466,7 @@ function bootstrap() {
 
 // 對外提供除錯 / 測試介面（之後階段會加入 evaluate、runTests 等）
 window.SafeAir = {
-  RUN_SPOTS, CONFIG, PM25_SOURCES, state, haversine, selectSpot,
+  RUN_SPOTS, CONFIG, PM25_SOURCES, state, getFavStore: () => favStore, createFavStore, validateFavName, haversine, selectSpot,
   idwEstimate, moenvAdapter, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
   pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, getHeatField: () => heatField, heatValueAt, heatPixelAt, buildHeatField,
