@@ -551,11 +551,16 @@ const CONFIG = {
   GEO_TIMEOUT_MS: 10000,     // 定位逾時
   REFRESH_MS: 10 * 60 * 1000, // 兩個資料來源皆每 10 分鐘自動更新
   FETCH_TIMEOUT_MS: 8000,    // 請求逾時 8 秒視為失敗
-  STATION_MAX_AGE_MIN: 60,   // 測站更新時間距今超過 60 分鐘即排除
-  PM25_MIN: 0,               // PM2.5 有效範圍下限：≤ 0 排除（0 值多為感測異常，見 lassAdapter 註解）
+  STATION_MAX_AGE_MIN: 180,  // 測站資料時間距今超過 3 小時即排除（環境部整點資料約 40 分後上線，再加上 GitHub 排程延遲）
+  PM25_MIN: 0,               // PM2.5 有效範圍下限：≤ 0 排除（視為缺值；環境部來源會改用移動平均值）
   PM25_MAX: 500,             // PM2.5 有效範圍上限（> 500 排除）
   MIN_VALID_STATIONS: 2,     // 台北範圍內有效測站 < 2 時改用 Mock
-  IDW: { power: 2, snapM: 50, radiiM: [3000, 5000] }, // IDW：p=2、<50m 直接採用；3 km 決定熱力圖是否留白、5 km 決定資訊卡是否標示「附近無測站」（皆不影響數值）
+  // IDW：p=2、<50 m 直接採用該測站；距離只決定顯示、不影響數值：
+  //   最近測站 > 8 km → 熱力圖留白（環境部測站下，台北市界內 99.1% 的位置在 8 km 內）
+  //   最近測站 > 5 km → 資訊卡標示「5 公里內無測站」（市界內 84.3% 在 5 km 內）
+  IDW: { power: 2, snapM: 50, heatBlankM: 8000, nearLabelM: 5000 },
+  // IDW 採用的測站範圍：台北範圍框向外約 10 km（納入基隆、淡水、林口、樹林等站，改善市界邊緣的估算）
+  STATION_BBOX: { minLng: 121.35, maxLng: 121.77, minLat: 24.87, maxLat: 25.30 },
   HEAT: { cellM: 75, opacity: 0.35, hatchOpacity: 0.8 }, // 熱力圖：75 m 細格、色塊透明度 0.35、斜線透明度 0.8
   TAIPEI_UTC_OFFSET_H: 8,    // 台灣無日光節約時間，固定 UTC+8
   // 地點搜尋（地理編碼）：OpenStreetMap Nominatim 公用服務。使用條款重點（2026-11 查證）：
@@ -570,7 +575,8 @@ const CONFIG = {
   CARTO_API_KEY: 'cb1_5e1f_1_c7302948d999cce1d9d6c96b',
   TILE_BASE: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}{r}.png?key={key}',
   TILE_LABELS: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_only_labels/{z}/{x}/{y}{r}.png?key={key}',
-  ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者 &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者 &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    + '｜PM2.5：<a href="https://data.moenv.gov.tw/dataset/detail/AQX_P_432">環境部環境資料開放平臺</a>',
 };
 
 /* ---------------------------------------------------------------------
@@ -581,11 +587,17 @@ const CONFIG = {
    - adapter 為函式宣告（會被提升），可在此直接引用。
    --------------------------------------------------------------------- */
 const PM25_SOURCES = [
-  { id: 'lass', name: 'LASS 空氣盒子', enabled: true,
-    url: 'https://pm25.lass-net.org/data/last-all-airbox.json', adapter: lassAdapter },
-  // 民生公共物聯網 SensorThings API：2026-11-21 起 SSL 憑證過期，尚未實測 CORS，暫不啟用
+  // 環境部「空氣品質指標（AQI）」：由 GitHub Actions 每小時第 45 分抓取並隨 Pages 部署（data/pm25.json，同網域、不含金鑰）。
+  // 讀取時加時間參數＋cache: 'no-store'，確保 iPhone 主畫面 App 與一般瀏覽器都拿到最新檔。
+  { id: 'moenv', name: '環境部', enabled: true, cacheBust: true,
+    credit: '資料來源：環境部環境資料開放平臺（空氣品質指標 AQI），依政府資料開放授權條款',
+    url: 'data/pm25.json', adapter: moenvAdapter },
+  // 民生公共物聯網 SensorThings API：計畫已於 2025-12-31 結束，SSL 憑證 2026-11-21 起過期；保留 adapter 但不啟用
   { id: 'sta', name: '民生公共物聯網（STA）', enabled: false,
     url: 'https://sta.ci.taiwan.gov.tw/STA_AirQuality_EPAIoT/v1.0', adapter: staAdapter },
+  // LASS 空氣盒子：自 2026-09-01 停止更新、回應無 CORS 標頭；停用（adapter 保留作為參考）
+  { id: 'lass', name: 'LASS 空氣盒子', enabled: false,
+    url: 'https://pm25.lass-net.org/data/last-all-airbox.json', adapter: lassAdapter },
 ];
 
 // 資料模式：即時資料（失敗自動降級為「正常」Mock）與三種 Demo 情境
@@ -777,8 +789,8 @@ function describeFailure(sourceName, err) {
     case 'network': return `無法連線至${sourceName}（跨網域限制或網路離線）`;
     case 'http':    return `${sourceName}回應錯誤（${err.detail}）`;
     case 'parse':   return `${sourceName}資料格式無法解析`;
-    case 'stale':   return `即時資料來源暫停更新（${sourceName}最新資料為 ${err.detail}）`;
-    case 'few':     return `${sourceName}在台北市範圍內的有效測站不足 ${CONFIG.MIN_VALID_STATIONS} 站`;
+    case 'stale':   return `${sourceName}資料超過 ${CONFIG.STATION_MAX_AGE_MIN / 60} 小時未更新（最後資料時間 ${err.detail}）`;
+    case 'few':     return `${sourceName}在台北周邊的有效測站不足 ${CONFIG.MIN_VALID_STATIONS} 站`;
     case 'none':    return '沒有啟用中的 PM2.5 資料來源';
     default:        return `${sourceName}發生未預期錯誤`;
   }
@@ -788,10 +800,11 @@ function describeFailure(sourceName, err) {
  * fetch 加上逾時（AbortController），並把各種失敗統一轉成 DataError。
  *
  * 【已知 Console 錯誤（僅「即時資料」模式）】
- * 以下兩則紅字由瀏覽器網路層直接輸出，JavaScript 無法攔截或隱藏；程式已正確降級，不影響操作：
- * 1. LASS：「Access to fetch at 'https://pm25.lass-net.org/...' has been blocked by CORS policy」
- *    與「net::ERR_FAILED」— LASS 回應未帶 Access-Control-Allow-Origin 標頭，瀏覽器拒絕讓網頁讀取。
- * 2. Open-Meteo：「429 (Too Many Requests)」— 同一對外 IP 請求過多時的限流（雲端 / 共用網路較常見）。
+ * 以下紅字由瀏覽器網路層直接輸出，JavaScript 無法攔截或隱藏；程式已正確降級，不影響操作：
+ * 1. Open-Meteo：「429 (Too Many Requests)」— 同一對外 IP 請求過多時的限流（雲端 / 共用網路較常見）。
+ * 2. 以 file:// 開啟時讀取 data/pm25.json 會被瀏覽器以 CORS 擋下（file:// 不允許 fetch 本機檔案）；
+ *    本機請用 npx serve，或直接使用 GitHub Pages。
+ * （LASS 已停用，不再出現其 CORS 錯誤。）
  * 三種 Mock 情境（正常 / 高空汙 / 大雨曝曬）不發出任何網路請求，Console 應為零錯誤、零警告。
  */
 async function fetchJson(url, ms = CONFIG.FETCH_TIMEOUT_MS, init = { cache: 'no-store' }) {
@@ -811,7 +824,34 @@ async function fetchJson(url, ms = CONFIG.FETCH_TIMEOUT_MS, init = { cache: 'no-
 }
 
 /* ---------------------------------------------------------------------
-   PM2.5 adapter：LASS 空氣盒子 last-all-airbox.json
+   PM2.5 adapter：環境部 AQI（經 tools/fetch_moenv.py 整理後的 data/pm25.json）
+   ---------------------------------------------------------------------
+   【2026-11-23 實測摘要】（API：https://data.moenv.gov.tw/api/v2/aqx_p_432?format=json&limit=1000&api_key=***）
+   - 原始回應為陣列（84 站），欄位全小寫、數值皆為字串：pm2.5 為最近 1 小時整數（例 "10"），
+     pm2.5_avg 為移動平均（例 "7.5"）；publishtime 例 "2026/11/23 22:00:00"（台北時間）。
+   - 抓取腳本轉成 { source, license, fetchedAt, publishTime, stations: [{ id, name, county, lat, lng, pm25, pm25Avg, time }] }，
+     非數值存 null、time 轉為 ISO（+08:00）。
+   - 取值規則：pm25 有效（> 0 且 ≤ 500）就用它；否則改用 pm25Avg，並標記 pmFrom = 'avg'
+     （資訊卡在「最近測站」使用移動平均值時註明）；兩者都無效 → 留給 cleanStations 計為無效值。
+   --------------------------------------------------------------------- */
+function moenvAdapter(json) {
+  if (!json || !Array.isArray(json.stations)) throw new DataError('parse');
+  const valid = (v) => v !== null && v > CONFIG.PM25_MIN && v <= CONFIG.PM25_MAX;
+  const out = [];
+  for (const s of json.stations) {
+    if (!s || typeof s !== 'object') continue;
+    const lat = toNum(s.lat), lng = toNum(s.lng), time = new Date(s.time);
+    if (lat === null || lng === null || isNaN(time)) continue;
+    const hourly = toNum(s.pm25), avg = toNum(s.pm25Avg);
+    const useAvg = !valid(hourly) && valid(avg);
+    out.push({ id: String(s.id || `${lat},${lng}`), name: String(s.name || ''), lat, lng, time,
+               pm25: useAvg ? avg : hourly, pmFrom: useAvg ? 'avg' : 'hourly' });
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------------------
+   PM2.5 adapter（停用）：LASS 空氣盒子 last-all-airbox.json
    ---------------------------------------------------------------------
    【2026-11-22 實測摘要】（tools/pm25_summary.py）
    - 結構：{ source, num_of_records, version, descriptions, feeds: [...] }，全台 462 站。
@@ -860,7 +900,7 @@ function staAdapter(json) { // eslint-disable-line no-unused-vars
 }
 
 /**
- * 共用清洗：台北範圍框 → PM2.5 有效範圍（> 0 且 ≤ 500；≤ 0 或 > 500 排除）→ 時效（≤ 60 分鐘）。
+ * 共用清洗：測站範圍框（台北向外約 10 km）→ PM2.5 有效範圍（> 0 且 ≤ 500；≤ 0 或 > 500 排除）→ 時效（≤ 3 小時）。
  * 回傳 { valid, stats }，stats 供判斷失敗原因（例如全部過期 → 來源暫停更新）。
  */
 function cleanStations(stations, now = new Date()) {
@@ -868,7 +908,7 @@ function cleanStations(stations, now = new Date()) {
   const maxAgeMs = CONFIG.STATION_MAX_AGE_MIN * 60e3;
   const valid = [];
   for (const st of stations) {
-    if (!inBBox(st.lat, st.lng)) continue;
+    if (!inBBox(st.lat, st.lng, CONFIG.STATION_BBOX)) continue;
     stats.inBBox++;
     if (!stats.latest || st.time > stats.latest) stats.latest = st.time;
     if (st.pm25 <= CONFIG.PM25_MIN || st.pm25 > CONFIG.PM25_MAX) { stats.badValue++; continue; }
@@ -883,10 +923,11 @@ async function loadPm25Live() {
   const reasons = [];
   for (const src of PM25_SOURCES.filter((s) => s.enabled)) {
     try {
-      const json = await fetchJson(src.url);
+      const json = await fetchJson(src.cacheBust ? `${src.url}?t=${Date.now()}` : src.url);
       const { valid, stats } = cleanStations(src.adapter(json));
       if (valid.length >= CONFIG.MIN_VALID_STATIONS) {
-        return { mode: 'live', sourceName: src.name, stations: valid, stats };
+        const dataTime = valid.reduce((m, st) => (st.time > m ? st.time : m), valid[0].time);
+        return { mode: 'live', sourceName: src.name, credit: src.credit || '', stations: valid, stats, dataTime };
       }
       // 範圍內有測站但全部過期 → 視為來源暫停更新
       const err = (stats.inBBox > 0 && stats.stale + stats.badValue === stats.inBBox && stats.stale > 0)
@@ -1062,8 +1103,9 @@ function getSourceStatus() {
   if (d.mode !== 'live') return { kind: 'offline', label: '離線 / 展示模式', reasons: d.pm.reasons };
   const reasons = [];
   reasons.push(d.pm.mode === 'live'
-    ? `PM2.5：即時資料（${d.pm.sourceName}，${d.pm.stations.length} 站）`
+    ? `PM2.5：即時資料（${d.pm.sourceName}，${d.pm.stations.length} 站，${formatTaipei(d.pm.dataTime)} 資料）`
     : `PM2.5：${d.pm.reasons.join('；')}，目前為展示數據`);
+  if (d.pm.mode === 'live' && d.pm.credit) reasons.push(d.pm.credit);
   reasons.push(d.wx.mode === 'live'
     ? `氣象：即時資料（Open-Meteo，${d.wx.hourKey.slice(11)} 整點預報）`
     : `氣象：${d.wx.reasons.join('；')}，目前為展示數據`);
@@ -1156,36 +1198,39 @@ function pointInPolygon(lat, lng, poly = TAIPEI_OUTLINE) {
  * IDW 估算指定座標的 PM2.5（跑點、使用者位置、熱力圖共用此函式，規則只有一套）。
  * - 數值：一律使用「全部有效測站」的反距離加權，w = 1 / d^p（p = 2）；
  *   與最近測站距離 < snapM（50 m）時直接採用該測站數值。
- * - 距離遠近只影響「是否有把握」，不影響數值：
- *     coverage 'near'（最近測站 ≤ 3 km）：熱力圖有資料；
- *     coverage 'far'（3–5 km）：熱力圖留白，資訊卡仍正常顯示；
- *     coverage 'none'（> 5 km）：熱力圖留白，資訊卡標示「附近無測站，以全市測站估算」。
+ * - 距離遠近只影響顯示，不影響數值：
+ *     heatBlank：最近測站 > heatBlankM（8 km）→ 熱力圖留白；
+ *     nearby   ：最近測站 ≤ nearLabelM（5 km）；否則資訊卡標示「5 公里內無測站，數值以較遠測站推估」。
+ * - nearest：最近的測站物件（資訊卡據此判斷是否「使用移動平均值」）。
  * - 距離用等距圓柱近似（誤差 < 0.1%，台北範圍內足夠），熱力圖每格都呼叫，需要快。
- * 回傳 { value, method: 'snap' | 'idw', nearestM, coverage, n } 或 null（沒有任何測站）。
+ * 回傳 { value, method: 'snap' | 'idw', nearestM, nearest, heatBlank, nearby, n } 或 null（沒有任何測站）。
  */
 function idwEstimate(lat, lng, stations, {
-  power = CONFIG.IDW.power, snapM = CONFIG.IDW.snapM, radiiM = CONFIG.IDW.radiiM,
+  power = CONFIG.IDW.power, snapM = CONFIG.IDW.snapM,
+  heatBlankM = CONFIG.IDW.heatBlankM, nearLabelM = CONFIG.IDW.nearLabelM,
 } = {}) {
   const n = stations ? stations.length : 0;
   if (n === 0) return null;
   const kx = 111320 * Math.cos(lat * Math.PI / 180), ky = 110950;
   const half = power / 2;
-  let best = Infinity, bestPm = NaN, sw = 0, sv = 0;
+  let best = Infinity, bestSt = null, sw = 0, sv = 0;
   for (let i = 0; i < n; i++) {
     const st = stations[i];
     const dy = (st.lat - lat) * ky, dx = (st.lng - lng) * kx;
     const d2 = dx * dx + dy * dy;
-    if (d2 < best) { best = d2; bestPm = st.pm25; }
+    if (d2 < best) { best = d2; bestSt = st; }
     const w = d2 === 0 ? 1e12 : (half === 1 ? 1 / d2 : d2 ** -half);
     sw += w; sv += w * st.pm25;
   }
   const nearestM = Math.sqrt(best);
   const snapped = nearestM < snapM;
   return {
-    value: round(snapped ? bestPm : sv / sw),
+    value: round(snapped ? bestSt.pm25 : sv / sw),
     method: snapped ? 'snap' : 'idw',
     nearestM,
-    coverage: nearestM <= radiiM[0] ? 'near' : nearestM <= radiiM[1] ? 'far' : 'none',
+    nearest: bestSt,
+    heatBlank: nearestM > heatBlankM,
+    nearby: nearestM <= nearLabelM,
     n,
   };
 }
@@ -1326,6 +1371,41 @@ function runTests() {
     const ratio = contrastRatio(css.getPropertyValue(v).trim(), '#FFFFFF');
     cases.push({ name: `對比度 ${v}`, expected: '≥ 4.5', actual: ratio.toFixed(2), ok: ratio >= 4.5 });
   }
+  // ---- 環境部 adapter、移動平均值、3 小時過期、IDW 距離門檻 ----
+  {
+    const now = new Date('2026-11-23T23:00:00+08:00');
+    const fixture = { stations: [
+      { id: '12', name: '中山', lat: 25.062361, lng: 121.526528, pm25: 10, pm25Avg: 7.5, time: '2026-11-23T22:00:00+08:00' },
+      { id: '13', name: '古亭', lat: 25.020608, lng: 121.529556, pm25: null, pm25Avg: 7.5, time: '2026-11-23T22:00:00+08:00' },
+      { id: '14', name: '萬華', lat: 25.046503, lng: 121.507972, pm25: 0, pm25Avg: null, time: '2026-11-23T22:00:00+08:00' },
+      { id: '1', name: '基隆', lat: 25.129167, lng: 121.760056, pm25: 8, pm25Avg: 8, time: '2026-11-23T19:30:00+08:00' },
+      { id: '30', name: '臺中', lat: 24.14, lng: 120.68, pm25: 20, pm25Avg: 19, time: '2026-11-23T22:00:00+08:00' },
+    ] };
+    const st = moenvAdapter(fixture);
+    const by = (id) => st.find((x) => x.id === id);
+    t('環境部：pm25 有效時採用最近 1 小時值', by('12').pm25, 10);
+    t('環境部：pm25 有效時標記 hourly', by('12').pmFrom, 'hourly');
+    t('環境部：pm25 缺值改用移動平均值', by('13').pm25, 7.5);
+    t('環境部：改用時標記 avg', by('13').pmFrom, 'avg');
+    t('環境部：資料時間解析（+08:00）', by('12').time.toISOString(), '2026-11-23T14:00:00.000Z');
+    t('環境部：格式錯誤時拋出 parse', (() => { try { moenvAdapter([]); return 'ok'; } catch (e) { return e.code; } })(), 'parse');
+    const { valid, stats } = cleanStations(st, now);
+    t('清洗：pm25 與移動平均都無效者排除', valid.some((x) => x.id === '14'), false);
+    t('清洗：超過 3 小時（3.5 小時前）排除', valid.some((x) => x.id === '1'), false);
+    t('清洗：範圍框外（台中）排除', valid.some((x) => x.id === '30'), false);
+    t('清洗：保留 2 站', valid.length, 2);
+    t('清洗：過期計數', stats.stale, 1);
+    const atZhongshan = idwEstimate(25.0624, 121.5265, valid);
+    t('IDW：最近測站物件回傳', atZhongshan.nearest.id, '12');
+    const atGuting = idwEstimate(25.0207, 121.5296, valid);
+    t('IDW：最近測站使用移動平均值時可辨識', atGuting.nearest.pmFrom, 'avg');
+    const one = [{ lat: 25.0, lng: 121.5, pm25: 10 }];
+    const at = (km) => idwEstimate(25.0 + km / 110.95, 121.5, one);
+    t('門檻：4.9 km 屬於附近', at(4.9).nearby, true);
+    t('門檻：5.1 km 標示附近無測站', at(5.1).nearby, false);
+    t('門檻：7.9 km 熱力圖仍上色', at(7.9).heatBlank, false);
+    t('門檻：8.1 km 熱力圖留白', at(8.1).heatBlank, true);
+  }
   // ---- 推薦規則依對象區分 ----
   {
     const sp5 = RUN_SPOTS.find((x) => x.id === 5), sp1 = RUN_SPOTS.find((x) => x.id === 1);
@@ -1424,7 +1504,7 @@ function runTests() {
     }
   }
   // 熱力圖與 idwEstimate 一致：固定種子抽 50 個市界內座標，該細格的熱力圖等級必須等於 idwEstimate 的等級
-  // （最近測站 > 3 km 者熱力圖應為留白）
+  // （最近測站 > 8 km 者熱力圖應為留白）
   if (state.data && heatField) {
     let seed = 20240607;
     const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -1438,7 +1518,7 @@ function runTests() {
       checked++;
       const px = heatPixelAt(la, ln);
       const est = idwEstimate(px.lat, px.lng, state.data.pm.stations);
-      const wantBlank = est.nearestM > CONFIG.IDW.radiiM[0];
+      const wantBlank = est.heatBlank;
       if (wantBlank) blanks++;
       const okPt = wantBlank ? px.value === null : classifyIndicator('pm25', px.value) === classifyIndicator('pm25', est.value);
       if (!okPt) bad++;
@@ -1850,7 +1930,9 @@ function cardHtml({ title, sub, ev, reading, closable, ref }) {
   const meta = STATUS_META[status];
   const notes = [];
   if (ev.partial && status !== 'unknown') notes.push('部分資料暫缺');
-  if (reading && reading.pmEstimate && reading.pmEstimate.coverage === 'none') notes.push('附近無測站，以全市測站估算');
+  const est = reading && reading.pmEstimate;
+  if (est && !est.nearby) notes.push(`${CONFIG.IDW.nearLabelM / 1000} 公里內無測站，數值以較遠測站推估`);
+  if (est && est.nearest && est.nearest.pmFrom === 'avg') notes.push('PM2.5 使用移動平均值（最近測站暫缺即時值）');
   const src = getSourceStatus();
   return `<article class="card ${meta.cls}" aria-label="${escapeHtml(title)}環境狀態">
     <div class="card-head">
@@ -2303,7 +2385,7 @@ let heatField = null;   // 最近一次計算的數值場（供測試與 heatVal
  * 作法：在台北市外框的外接矩形內，以 HEAT.cellM（75 m）的細格逐格呼叫 idwEstimate（與跑點共用，規則只有一套）。
  * 不先算 300 m 網格再內插：300 m 網格的節點不會剛好落在測站上，測站附近的峰值會被相鄰節點平均壓低一級。
  * - 數值：全部有效測站的 IDW（測站 50 m 內採用該測站數值）。
- * - 留白：最近測站 > 3 km 的格點不上色，改在市界內畫淡灰斜線。
+ * - 留白：最近測站 > 8 km（CONFIG.IDW.heatBlankM）的格點不上色，改在市界內畫淡灰斜線。
  * - 色塊依 PM2.5 門檻離散上色，再以市界多邊形裁切；畫布垂直方向以 Web Mercator 對應，才能與 imageOverlay 對齊。
  */
 function buildHeatField(stations) {
@@ -2329,7 +2411,7 @@ function buildHeatField(stations) {
       const lng = minLng + (px + 0.5) / W * (maxLng - minLng);
       const est = idwEstimate(lat, lng, stations); // 與跑點共用同一個函式
       const o = (py * W + px) * 4;
-      if (!est || est.nearestM > CONFIG.IDW.radiiM[0]) { blank.data[o + 3] = 255; continue; } // 最近測站 > 3 km：留白
+      if (!est || est.heatBlank) { blank.data[o + 3] = 255; continue; } // 最近測站 > 8 km：留白
       values[py * W + px] = est.value;
       filled++;
       const c = HEAT_COLORS[classifyIndicator('pm25', est.value)];
@@ -2430,7 +2512,7 @@ function initHeatControl() {
   const sw = (level) => `rgba(${HEAT_COLORS[level].join(',')},${CONFIG.HEAT.opacity})`; // 與疊在地圖上的實際顯示色一致
   const full = '<h3>PM2.5 推估（μg/m³）</h3><ul>' +
     HEAT_LEGEND.map((l) => `<li><span class="sw" style="background:${sw(l.level)}"></span>${l.text}</li>`).join('') +
-    '<li><span class="sw blank"></span>無資料（3 km 內無測站）</li></ul>' +
+    `<li><span class="sw blank"></span>無資料（${CONFIG.IDW.heatBlankM / 1000} km 內無測站）</li></ul>` +
     '<p class="note">依測站以反距離加權（IDW）估算，僅反映 PM2.5；各跑點是否適合出發，請看跑點燈號。</p>';
   // 窄螢幕的單行小圖例：低 / 中 / 高 / 無資料；點一下展開完整說明
   const short = ['低', '中', '高'];
@@ -2771,7 +2853,7 @@ function bootstrap() {
 // 對外提供除錯 / 測試介面（之後階段會加入 evaluate、runTests 等）
 window.SafeAir = {
   RUN_SPOTS, CONFIG, PM25_SOURCES, state, haversine, selectSpot,
-  idwEstimate, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
+  idwEstimate, moenvAdapter, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
   pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, getHeatField: () => heatField, heatValueAt, heatPixelAt, buildHeatField,
 };

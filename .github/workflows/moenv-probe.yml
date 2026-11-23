@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: 取得程式碼（讀取 tools/moenv_probe.py 與 index.html 的市界）
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 呼叫 API 並輸出摘要
         env:

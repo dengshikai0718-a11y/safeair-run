@@ -52,14 +52,16 @@ python -m http.server 8000
 
 ### GitHub Pages 零成本部署（手機實機 HTTPS 測試）
 
+網站由 GitHub Actions（`.github/workflows/pages.yml`）部署，部署時同時抓取環境部 PM2.5 資料（見 [資料來源與授權](#資料來源與授權)）。
+
 1. 將專案推上 GitHub（`index.html` 需位於 repo 根目錄）。
-2. 進入 repo 的 **Settings → Pages**。
-3. **Build and deployment → Source** 選 **Deploy from a branch**。
-4. **Branch** 選 `main`、資料夾選 `/ (root)`，按 **Save**。
-5. 約 1～2 分鐘後，頁面上方會顯示網址：`https://<帳號>.github.io/<repo 名稱>/`。
+2. 到 repo 的 **Settings → Secrets and variables → Actions**，新增 Secret `MOENV_API_KEY`（環境部環境資料開放平臺的會員 API 金鑰）。
+3. 進入 **Settings → Pages**，**Build and deployment → Source** 選 **GitHub Actions**。
+4. 到 **Actions** → 「部署網站與 PM2.5 資料」→ **Run workflow**（之後 push 到 `main` 與每小時第 45 分會自動執行）。
+5. 完成後網址為 `https://<帳號>.github.io/<repo 名稱>/`，PM2.5 資料在 `…/data/pm25.json`。
 6. 用手機瀏覽器開啟該網址，允許「位置」權限；要測試通知請看 [背景監測與通知](#背景監測與通知)。
 
-之後每次 `git push` 到 `main`，GitHub Pages 會自動重新部署。
+> **排程會被自動停用**：repo 連續 60 天沒有任何活動時，GitHub 會停用排程並寄信通知。到 **Actions** → 選該 workflow → **Enable workflow** 即可恢復。執行失敗時 GitHub 也會寄信，偶爾失敗沒關係（網頁沿用舊資料，超過 3 小時才降級為 Mock）。
 
 ### CARTO 底圖金鑰（部署後務必設定）
 
@@ -139,7 +141,7 @@ index.html?mode=storm       # 大雨曝曬：大佳、花博降雨 > 60%，其�
 | 資料 | 來源 | 授權／條款 |
 | :--- | :--- | :--- |
 | 底圖與標籤 | CARTO（`light_nolabels`＋`light_only_labels`，縮放 ≥ 14 疊加標籤）；需免費 API 金鑰 | © CARTO；圖資 © OpenStreetMap 貢獻者（地圖右下角已標示） |
-| PM2.5 | LASS 空氣盒子 `pm25.lass-net.org/data/last-all-airbox.json`（透過可抽換的 `PM25_SOURCES`） | 見下方「已知限制」：實測無 CORS 標頭且資料停更，實際上會降級為 Mock |
+| PM2.5 | **環境部環境資料開放平臺**「空氣品質指標（AQI）」資料集 AQX_P_432，由 GitHub Actions 每小時第 45 分抓取並隨網站部署為 `data/pm25.json`（金鑰只在 Actions 使用） | 依[政府資料開放授權條款](https://data.gov.tw/license)，須標示出處（地圖右下角與資料來源說明已標示）；會員金鑰每個 API 每日 5,000 次，資料每小時更新 |
 | 氣象（降雨機率、紫外線、體感溫度） | [Open-Meteo](https://open-meteo.com/) 免金鑰預報 API（多座標一次請求） | 非商業使用免費；請遵守其使用條款與限流 |
 | 地點搜尋 | OpenStreetMap [Nominatim](https://operations.osmfoundation.org/policies/nominatim/) 公用服務 | 資料 ODbL，須標示「© OpenStreetMap 貢獻者」；使用政策見下 |
 | 台北市界 | OpenStreetMap 臺北市行政邊界，簡化至約 80 m 容差後內嵌 | ODbL；只用於熱力圖裁切與「是否在台北市內」，不可當作行政區判定 |
@@ -153,18 +155,28 @@ index.html?mode=storm       # 大雨曝曬：大佳、花博降雨 > 60%，其�
 - 禁止自動完成（本專案不會）；每秒最多 1 次請求；相同查詢只查一次。
 - 須以 Referer 或 User-Agent 辨識應用程式。瀏覽器無法自訂 User-Agent，靠 Referer 辨識，所以請用 localhost 或 GitHub Pages 開啟；`file://` 沒有 Referer，服務可能拒絕。
 
-### PM2.5 資料清洗規則
+### PM2.5 資料流程與清洗規則
 
-1. 只保留台北市範圍框內的測站（經度 121.45–121.67、緯度 24.96–25.21）。
-2. 排除 PM2.5 **≤ 0** 或 **> 500** μg/m³ 的測站（LASS 實測約半數測站回報 0，多為感測異常，會嚴重拉低 IDW 估算）。
-3. 排除更新時間距今超過 60 分鐘的測站。
-4. 有效測站 < 2 站或請求失敗（逾時 8 秒）時，自動改用內建 Mock 數據，並顯示「離線／展示模式」；滑鼠移到標記上或點擊可看原因。
+```
+環境部 API ──(每小時第 45 分，GitHub Actions，帶 MOENV_API_KEY)──▶ tools/fetch_moenv.py ──▶ data/pm25.json（隨 Pages 部署，不 commit）
+                                                                                              │
+網頁「即時資料」模式 ──(fetch，加時間參數＋cache: 'no-store'，避開瀏覽器與主畫面 App 快取)──────┘
+```
 
-檢查資料來源欄位（不會印出完整 JSON，會輸出「0 值測站數」）：
+- 環境部整點資料約 40 分鐘後上線，所以排程在每小時第 45 分。API 失敗時重試，仍失敗則沿用線上那份 JSON；也拿不到時（排程執行）不部署，線上維持上一版。
+- **取值**：使用 `pm2.5`（最近 1 小時）；缺值、非數值或 ≤ 0 時改用 `pm2.5_avg`（移動平均），該點的**最近測站**使用移動平均值時，資訊卡註明「PM2.5 使用移動平均值」。
+- **清洗**：
+  1. 只採用台北範圍框向外約 10 km 內的測站（經度 121.35–121.77、緯度 24.87–25.30，約 20 站，含基隆、淡水、林口、樹林等），改善市界邊緣的估算。
+  2. 排除 PM2.5 **≤ 0** 或 **> 500** μg/m³（且移動平均也無效）的測站。
+  3. 排除資料時間距今超過 **3 小時**的測站（容許資料上線時間與 GitHub 排程延遲）。
+  4. 有效測站 < 2 站、檔案讀不到或格式錯誤時，自動改用內建 Mock 數據，並顯示「離線／展示模式」與原因（例如「環境部資料超過 3 小時未更新（最後資料時間 22:00）」）。
+- 本機開發時沒有 `data/pm25.json`，「即時資料」會降級為 Mock；如要在本機看真實資料，可用自己的金鑰執行（`data/` 已列入 `.gitignore`）：
 
 ```bash
-python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.json
+MOENV_API_KEY=你的金鑰 python3 tools/fetch_moenv.py --out data/pm25.json
 ```
+
+- 已停用的來源：LASS 空氣盒子（2026-09-01 起停更、無 CORS 標頭，adapter 保留作參考）；民生公共物聯網 STA（計畫已於 2025-12-31 結束、SSL 憑證 2026-11-21 起過期，adapter 保留但不啟用）。
 
 ---
 
@@ -184,7 +196,8 @@ python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.jso
 ### IDW（跑點與熱力圖共用 `idwEstimate`）
 
 - 數值一律使用**全部有效測站**的反距離加權（p = 2）；最近測站 < 50 m 時直接採用該測站數值。
-- 距離只決定顯示、不影響數值：最近測站 > 3 km，熱力圖留白（市界內畫淡灰斜線）；> 5 km，資訊卡標示「附近無測站，以全市測站估算」。
+- 距離只決定顯示、不影響數值：最近測站 > **8 km**，熱力圖留白（市界內畫淡灰斜線）；> **5 km**，資訊卡標示「5 公里內無測站，數值以較遠測站推估」。
+- 門檻依據（2026-11-23 以環境部測站實測，台北市界內約 300 m 格點到最近測站的距離）：≤ 2 km 24.0%、≤ 3 km 46.0%、≤ 5 km 84.3%、≤ 8 km 99.1%，最遠 8.71 km。若沿用 3 km，市內一半以上會留白；8 km 只留下最偏遠約 1% 的山區。
 
 ### 熱力圖
 
@@ -232,12 +245,14 @@ python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.jso
 ## 已知限制
 
 - **頁面關閉後無法監測**：純網頁在分頁／App 被關閉後無法執行。iOS 上 App 切到背景後網頁很快被凍結，計時器與 Service Worker 都無法長時間運作，回到前景時才會補做檢查。
-- **LASS 實際上不可用**：2026-11 實測，回應沒有 `Access-Control-Allow-Origin`（瀏覽器無法讀取），且資料停在 2026-09-01，因此「即時資料」模式的 PM2.5 會降級為 Mock 並說明原因；氣象（Open-Meteo）可正常取得。`PM25_SOURCES` 已預留 STA adapter 空函式（SensorThings API，憑證過期、尚未實測 CORS，待重新測試）。
-- **Console 已知錯誤（僅「即時資料」模式）**：由瀏覽器網路層直接輸出，網頁程式無法攔截；程式已自動降級為展示數據。三種 Mock 情境下 Console 應為零錯誤、零警告。
+- **PM2.5 測站稀疏**：環境部台北周邊約 20 站，市內只有 46% 的位置在 3 km 內有測站，熱力圖較平滑、無法反映街區尺度差異；資料每小時更新一次，並有約 1 小時的上線延遲。
+- **CARTO 金鑰已限制網域**：只有 GitHub Pages 網址能載入底圖；`file://` 與 `localhost`（除非也加入允許清單）會看到空白底圖，Console 會出現底圖圖磚的 `403`。開發與 Demo 請用 GitHub Pages 網址。
+- **Console 已知錯誤**：由瀏覽器網路層直接輸出，網頁程式無法攔截；程式已自動降級。在 GitHub Pages 上，三種 Mock 情境的 Console 應為零錯誤、零警告。
 
   | 錯誤訊息 | 來源 | 原因 |
   | :--- | :--- | :--- |
-  | `Access to fetch at 'https://pm25.lass-net.org/...' has been blocked by CORS policy`、`net::ERR_FAILED` | LASS 空氣盒子 | 伺服器回應未帶 `Access-Control-Allow-Origin` 標頭（另：資料自 2026-09-01 起停止更新） |
+  | `403` 圖磚（`*.basemaps.cartocdn.com`） | CARTO 底圖 | 金鑰已限制在 GitHub Pages 網域，`file://`／未列入的 `localhost` 會被拒絕（任何模式） |
+  | `data/pm25.json` 的 CORS 錯誤 | 環境部資料檔 | 只在以 `file://` 開啟並切到「即時資料」時出現（`file://` 不允許 fetch 本機檔案） |
   | `429 (Too Many Requests)` | Open-Meteo | 同一對外 IP 請求過多被限流（雲端主機、共用網路較常見，通常稍後即恢復） |
   | CORS 錯誤／`629` 或 `429` | Nominatim（地點搜尋） | 只會在使用「搜尋地點」且被限流或用 `file://` 開啟時出現；被限流時錯誤頁不含 CORS 標頭，介面會顯示查詢失敗訊息 |
 
@@ -254,7 +269,7 @@ python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.jso
 | # | 項目 | 原規格 | 實際做法 | 原因 |
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | 熱力圖網格 | 300 m 網格 | 75 m 細格直接逐格 IDW（不內插） | 300 m 網格的節點不落在測站上，會把測站附近的峰值壓低一級（青年公園紅燈被畫成黃色）；75 m 計算量仍小（約 0.1 秒） |
-| 2 | IDW 數值 | 3 km → 5 km → 全市平均 | 數值一律用全部測站加權；3 km／5 km 只決定熱力圖留白與「附近無測站」標示 | 跑點與熱力圖共用單一規則，避免邊界上「只剩一站」造成孤立色塊 |
+| 2 | IDW 數值 | 3 km → 5 km → 全市平均 | 數值一律用全部測站加權；距離只決定顯示：> 8 km 熱力圖留白、> 5 km 標示「5 公里內無測站」 | 跑點與熱力圖共用單一規則；改用環境部測站後依實測距離分布調整門檻（見「IDW」一節） |
 | 3 | 熱力圖透明度 | 0.5 | 0.35 | 驗收時要求，避免蓋住底圖與標記 |
 | 4 | 熱力圖圖例 | （未規定用語） | PM2.5 低／中／高，不用燈號用語 | 避免與跑點燈號矛盾 |
 | 5 | 市界 | 手繪簡化輪廓 | OpenStreetMap 臺北市行政邊界（簡化 80 m） | 手繪輪廓南界越過新店溪 |
@@ -265,10 +280,10 @@ python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.jso
 | 10 | 推薦規則 | 黃／紅跑點推薦 5 km 內較佳跑點 | 跑點：「替代跑點」（同原規則）；目前位置／搜尋／選點：「附近跑點」（不論燈號） | 驗收後依對象區分 |
 | 11 | 大佳河濱公園的推薦 | 花博新生園區 | 花博新生園區與國立中正紀念堂 | 中正紀念堂距大佳約 4.8 km，在 5 km 內且燈號較佳；經確認接受 |
 | 12 | 新增「資料不足」狀態 | 三級 | 另加灰色「資料不足」（#94A3B8／文字 #475569／help-circle） | 四項資料皆缺時不應誤判為綠燈 |
-| 13 | PM2.5 資料來源 | 單一來源 | 可抽換 `PM25_SOURCES`＋各自 adapter；STA 為預留空函式 | LASS 實測無 CORS 且停更，需可替換 |
+| 13 | PM2.5 資料來源 | 單一來源（LASS） | 可抽換 `PM25_SOURCES`：環境部（啟用，經 GitHub Actions）、STA（保留不啟用）、LASS（停用） | LASS 停更且無 CORS；民生公共物聯網計畫結束；環境部 API 需金鑰，不能放前端 |
 | 14 | 底圖金鑰 | 無需金鑰 | `CONFIG.CARTO_API_KEY` | CARTO 底圖改為需要免費金鑰；部署後須限制 Referer |
-| 15 | PM2.5 清洗 | 排除 ≤ 0 或 > 500 之外的規則 | 另排除過期 > 60 分鐘、範圍框外測站 | 實測約半數測站回報 0；需防範停更資料 |
-| 16 | 資訊卡文案 | 「附近無測站，以全市平均估算」 | 「附近無測站，以全市測站估算」 | 數值不再是單純全市平均（見 #2） |
+| 15 | PM2.5 清洗 | 排除 ≤ 0 或 > 500 | 另排除資料時間 > 3 小時、台北向外約 10 km 範圍外的測站；pm2.5 無效時改用 pm2.5_avg | 環境部資料約 40 分後上線、GitHub 排程會延遲；邊緣測站改善市界邊緣估算 |
+| 16 | 資訊卡文案 | 「附近無測站，以全市平均估算」 | 「5 公里內無測站，數值以較遠測站推估」；另有「PM2.5 使用移動平均值（最近測站暫缺即時值）」 | 數值不再是單純全市平均（見 #2） |
 | 17 | 窄螢幕 Bottom Sheet | 顯示資訊卡 | 展開後另含跑點列表；展開時隱藏右下控制鈕 | 窄螢幕沒有側邊欄，列表需要地方放 |
 | 18 | 取消選取 | （未規定） | 點地圖空白處或卡片 ✕ | 驗收時保留；已確認拖曳地圖不會誤觸 |
 | 19 | 行政區判定 | （無） | 12 個行政區中心點的最近者 | 用於選點副標與通知冷卻分組；離線、近似 |
@@ -291,7 +306,7 @@ python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.jso
 - [x] **三級判定邊界值**：`SafeAir.runTests()` 共 107 項全過，含 15.4／15.5／35.5、30／31／60／61、5.0／8.0、5／10／30／33、整體判定、缺值、主因優先、推薦規則、長按、冷卻、熱力圖一致性與 WCAG 對比。
 - [x] **熱力圖可開關，色階與門檻一致，不超出台北市**：圖例與門檻一致；抽樣檢查畫出的像素落在市界外者 < 0.1%（僅邊緣反鋸齒）。
 - [x] **黃／紅燈跑點最多 3 個替代跑點，點擊可切換**。
-- [x] **四種資料模式都能切換且畫面更新**（即時資料因 LASS 無法使用而降級為展示數據並說明原因）。
+- [x] **四種資料模式都能切換且畫面更新**（即時資料的 PM2.5 來自環境部；讀不到時降級為展示數據並說明原因）。
 - [x] **「立即測試通知」觸發橫幅與系統通知，冷卻生效**：電腦端以模擬 Notification 驗證；iPhone 實機測試通過（見上方）。
 - [x] **狀態文字色與白底對比度達 WCAG AA（≥ 4.5:1）**：綠／黃／紅／灰狀態文字色及次要文字色，由 `runTests()` 檢查。
 - [x] **iPhone 實機（iOS 26.5.2，2026-11-23）**：真實 Nominatim 搜尋（「台北101」「師大」「西門町」「台中車站」）、長按選點、Bottom Sheet 觸控手感、推薦規則（搜尋地點「附近跑點」、跑點「替代跑點」）皆通過。
@@ -302,7 +317,7 @@ python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.jso
 ## 未來可擴充項目
 
 1. **伺服器 Web Push**：讓 App 完全關閉也能收到通知。需要 VAPID 金鑰、Service Worker `push` 事件、前端訂閱流程，以及後端（儲存訂閱與粗略位置、每 10 分鐘抓資料並套用同一套判定、用加密 Web Push 協定送出）。免費方案可考慮 Cloudflare Workers＋Cron Trigger＋KV/D1。需評估隱私（儲存裝置端點與位置，建議只存行政區代碼並設保存期限）與維運成本，預估 3–5 個工作天（含 iOS 實機除錯）。
-2. **真實 PM2.5 資料來源**：重新測試 STA（SensorThings API）adapter；或評估環境部（moenv）資料（需金鑰）、改走自架代理或排程快取，以取得「免金鑰、支援 CORS、可依範圍查詢」的穩定來源，解除 LASS 無法使用的限制。
+2. **更密的 PM2.5 資料**：環境部測站稀疏；未來可評估加入微型感測器資料（需確認來源、品質與授權）以提高解析度。
 3. **擴充到台灣北部**：把 `RUN_SPOTS` 擴充到 25 個以上並涵蓋新北、基隆、桃園；市界改為多個縣市界或改用行政區面資料；`BBOX`、行政區判定與 `CONFIG.GEOCODER` 的範圍同步調整。
 4. **更精確的行政區判定**：用官方行政區面資料（例如內嵌簡化後的 12 區多邊形）取代最近中心點。
 5. **跑點評分與路線**：加入空氣品質預報、依時段推薦出發時間，或與路線資料結合。
@@ -330,5 +345,9 @@ sw.js           # Service Worker：只負責顯示通知（手機瀏覽器需要
 manifest.json   # PWA 設定（加入主畫面後以 App 方式開啟）
 icons/          # App 圖示：icon-192.png、icon-512.png、apple-touch-icon.png
 README.md       # 本文件
-tools/pm25_summary.py  # PM2.5 資料來源欄位摘要腳本
+tools/fetch_moenv.py   # 環境部 AQI → data/pm25.json（GitHub Actions 每小時執行）
+tools/moenv_probe.py   # 環境部 API 探測（只輸出摘要；手動 workflow 使用）
+tools/pm25_summary.py  # LASS 資料欄位摘要腳本（LASS 已停用，保留參考）
+.github/workflows/pages.yml        # 部署網站＋抓取 PM2.5（push、每小時第 45 分、手動）
+.github/workflows/moenv-probe.yml  # 環境部 API 探測（只能手動）
 ```
