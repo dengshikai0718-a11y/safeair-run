@@ -1,0 +1,21 @@
+# 階段 A+：測站加密評估探測（測試用，只能手動觸發）
+# - 不需要任何金鑰；只在執行紀錄與 Summary 輸出摘要，不 commit、不上傳資料檔。
+# - 檢查國網中心 moenviot 資料集的 API 端點，以及民生公共物聯網 STA 的憑證、CORS 與台北範圍內的 PM2.5 感測器。
+name: 測試：測站加密探測（手動）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 取得程式碼
+        uses: actions/checkout@v7
+
+      - name: 探測並輸出摘要
+        run: python3 tools/stations_probe.py
