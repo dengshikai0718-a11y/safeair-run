@@ -31,6 +31,8 @@
 雙擊 `index.html`（`file://`）即可預覽完整 UI，並以 Mock 數據操作。
 
 > `file://` 下瀏覽器通常不提供定位、Service Worker 與系統通知，地點搜尋也可能被拒絕（沒有 Referer）。要測試這些請用下方本機伺服器或 GitHub Pages。
+>
+> **注意**：CARTO 金鑰限制網域後（見下方「CARTO 底圖金鑰」），`file://` 將看不到底圖，開發與 Demo 請改用 GitHub Pages 網址或 `npx serve .`。
 
 ### 本機伺服器
 
@@ -67,8 +69,9 @@ CARTO 底圖已改為需要（免費）API 金鑰，未帶金鑰會顯示「API 
 
 1. 登入 CARTO 後台，找到此 API 金鑰的設定。
 2. 加入 Referer（允許網域）限制：`https://<帳號>.github.io/*`。
-3. 若仍需在本機開發，可一併加入 `http://localhost:*`。注意：`file://` 雙擊開啟時瀏覽器不送 Referer，加上限制後可能無法載入底圖，請改用本機伺服器。
-4. 若金鑰疑似被濫用，可在後台重新產生金鑰並更新 `CONFIG.CARTO_API_KEY`。
+3. 若仍需在本機開發，可一併加入 `http://localhost:*`。
+4. **設定 Referer 限制後，本機以 `file://` 雙擊開啟將看不到底圖**（瀏覽器不送 Referer，CARTO 會拒絕）。開發與 Demo 請改用 GitHub Pages 網址，或用 `npx serve .` 開啟（需把 `http://localhost:*` 加入允許清單）。
+5. 若金鑰疑似被濫用，可在後台重新產生金鑰並更新 `CONFIG.CARTO_API_KEY`。
 
 ---
 
@@ -209,7 +212,7 @@ python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.jso
 ### iPhone 實機測試結果
 
 - 測試日期：2026-11-23
-- 裝置與系統：iPhone 實機測試；iOS 版本：**（待補，請填入實測的 iOS 版本）**
+- 裝置與系統：iPhone 實機測試；iOS 版本：**26.5.2**
 - 測試網址：GitHub Pages（HTTPS）
 
 | 項目 | 結果 |
@@ -219,7 +222,11 @@ python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.jso
 | 通知出現在通知中心 | ✅ 通過 |
 | 「設定 → 通知」出現 SafeAir Run | ✅ 通過 |
 | 「正常 → 高空汙」轉差通知 | ✅ 通過 |
+| 真實 Nominatim 地點搜尋（台北101、師大、西門町、台中車站） | ✅ 通過 |
+| 長按選點與 Bottom Sheet 觸控手感 | ✅ 通過 |
+| 推薦規則：搜尋地點顯示「附近跑點」、跑點顯示「替代跑點」 | ✅ 通過 |
 
+> **Android 未經實機驗證**：沒有 Android 裝置，Android 通知（經 `sw.js`）與長按選點的行為僅有程式邏輯與 Chromium 模擬測試，尚未實機確認。
 ---
 
 ## 已知限制
@@ -287,7 +294,8 @@ python3 tools/pm25_summary.py https://pm25.lass-net.org/data/last-all-airbox.jso
 - [x] **四種資料模式都能切換且畫面更新**（即時資料因 LASS 無法使用而降級為展示數據並說明原因）。
 - [x] **「立即測試通知」觸發橫幅與系統通知，冷卻生效**：電腦端以模擬 Notification 驗證；iPhone 實機測試通過（見上方）。
 - [x] **狀態文字色與白底對比度達 WCAG AA（≥ 4.5:1）**：綠／黃／紅／灰狀態文字色及次要文字色，由 `runTests()` 檢查。
-- ⏳ **待實機**：Android 通知（經 `sw.js`）、真實 Nominatim 搜尋（「台北101」「師大」「西門町」「台中車站」）、iOS／Android 長按選點手感與 Bottom Sheet 觸控手感。
+- [x] **iPhone 實機（iOS 26.5.2，2026-11-23）**：真實 Nominatim 搜尋（「台北101」「師大」「西門町」「台中車站」）、長按選點、Bottom Sheet 觸控手感、推薦規則（搜尋地點「附近跑點」、跑點「替代跑點」）皆通過。
+- ⚠️ **Android 未經實機驗證**（沒有 Android 裝置）：Android 通知（經 `sw.js`）與長按選點僅做過 Chromium 模擬測試。
 
 ---
 
