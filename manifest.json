@@ -1,0 +1,17 @@
+{
+  "name": "SafeAir Run",
+  "short_name": "SafeAir Run",
+  "description": "慢跑場域環境查詢：依 PM2.5、降雨機率、紫外線與體感溫度判斷台北跑點是否適合出發。",
+  "lang": "zh-TW",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#10B981",
+  "background_color": "#F8FAFC",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

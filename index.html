@@ -3,7 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F8FAFC">
+<meta name="theme-color" content="#10B981">
+<!-- PWA：加入主畫面後以 App（standalone）方式開啟；iPhone 需要這樣才能收到網頁通知（iOS 16.4+） -->
+<script>
+  // manifest 只在 http(s)（localhost / GitHub Pages）加入：file:// 下 Chrome 會嘗試讀取並在 Console 印出 CORS 錯誤，
+  // 會違反「三種 Mock 情境 Console 零錯誤」的驗收標準；file:// 本來就無法安裝成 App，不需要它。
+  if (/^https?:$/.test(location.protocol)) {
+    const l = document.createElement('link');
+    l.rel = 'manifest'; l.href = 'manifest.json';
+    document.head.appendChild(l);
+  }
+</script>
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SafeAir Run">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>SafeAir Run</title>
 <meta name="description" content="慢跑場域環境查詢：依 PM2.5、降雨機率、紫外線與體感溫度判斷台北跑點是否適合出發。">
 <!-- 唯一的外部依賴：Leaflet 1.9.4（鎖定版本，附 SRI 完整性校驗） -->
@@ -358,6 +374,8 @@ button { font: inherit; color: inherit; }
 .btn:hover { background: var(--hover); }
 .link-btn { min-height: var(--touch); padding: 0 4px; border: 0; background: none; font: 13px var(--font); color: var(--focus);
             text-decoration: underline; cursor: pointer; }
+.mon-ios strong { display: block; margin-top: 2px; color: var(--yellow-text); }
+@media (min-width: 768px) { .mon-ios { display: none; } } /* 寬螢幕（電腦）不需要 iPhone 說明 */
 .mon-msg { margin: 0; min-height: 1em; font-size: 12px; color: var(--text-2); }
 #settingsMenu { max-height: calc(100% - 96px); overflow-y: auto; }
 
@@ -2533,9 +2551,14 @@ function monitorSubject() {
   return { district: districtOf(state.userPos.lat, state.userPos.lng), ev: state.userEvaluation, reading: state.userReading };
 }
 
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
 /** 系統通知是否可用（不含權限） */
 function notifySupport() {
-  if (typeof Notification === 'undefined') return { ok: false, reason: '此瀏覽器不支援系統通知' };
+  if (typeof Notification === 'undefined') {
+    return { ok: false, reason: isIOS() && !isStandalone() ? 'iPhone 需先「加入主畫面」並從圖示開啟才能使用系統通知' : '此瀏覽器不支援系統通知' };
+  }
   if (!window.isSecureContext) return { ok: false, reason: '此網址不是 HTTPS 或 localhost，瀏覽器不提供系統通知' };
   return { ok: true, reason: '' };
 }
@@ -2675,6 +2698,7 @@ function renderMonitor() {
     ${permNote ? `<p class="mon-note">${escapeHtml(permNote)}</p>` : ''}
     ${m.msg ? `<p class="mon-note">${escapeHtml(m.msg)}</p>` : ''}
     <p class="mon-note">頁面關閉後無法監測，請保持頁面開啟（可切到背景）。</p>
+    <p class="mon-note mon-ios">iPhone 需 iOS 16.4 以上，並先「分享 → 加入主畫面」，再從主畫面圖示開啟，才能收到系統通知。${isIOS() && !isStandalone() ? '<strong>目前是在 Safari 分頁中，尚未收得到通知。</strong>' : ''}</p>
     <div class="mon-actions"><button type="button" class="btn" data-action="test-notify">立即測試通知</button>
       <button type="button" class="link-btn" data-action="clear-cooldown">清除冷卻紀錄</button></div>
     <p class="mon-msg" role="status">${escapeHtml(m.testMsg)}</p>`;

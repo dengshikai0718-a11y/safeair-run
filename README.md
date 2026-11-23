@@ -95,6 +95,7 @@ index.html?mode=storm       # 大雨曝曬：大佳、花博降雨 > 60%，其�
 - 提醒內容為狀態、主因與建議，同時送出系統通知與可關閉的橫幅。
 - 同一行政區 60 分鐘內不重複提醒，冷卻紀錄存於 `localStorage`（不可用時退回記憶體）。「立即測試通知」同樣遵守冷卻，冷卻中顯示「冷卻中，剩 N 分鐘」；「清除冷卻紀錄」可重置。沒有定位時，測試通知以選取的跑點（或第一個跑點）示範。
 - **限制**：純網頁在頁面（分頁 / PWA）被關閉後無法執行，只能在頁面開著（可在背景）時監測；手機瀏覽器背景分頁的計時器可能被節流。
+- **iPhone 通知**：需 iOS 16.4 以上，先用 Safari 開啟網址 →「分享 → 加入主畫面」→ 從**主畫面圖示**開啟（以 App 方式運作），再到設定選單開啟背景監測並允許通知；在 Safari 分頁內無法使用系統通知（頁面內橫幅仍可用）。專案含 `manifest.json`（standalone、主題色 #10B981）與 `icons/`（192 / 512 / apple-touch-icon）。manifest 只在 http(s) 下載入；`file://` 不載入以免 Console 出現 CORS 錯誤。
 - **`sw.js`**：手機瀏覽器（Android Chrome）不允許頁面直接 `new Notification`，必須經由 Service Worker 的 `showNotification`，所以多了一個只負責顯示通知與點擊回到頁面的 `sw.js`（不快取、不攔截請求）。`file://` 無法註冊 Service Worker，會自動退回頁面直接通知或橫幅。iPhone 需 iOS 16.4 以上並「加入主畫面」後從圖示開啟。
 - 想快速看到效果：開啟監測後，用資料模式從「正常」切到「高空汙」（需有定位），下次檢查即會提醒。
 
@@ -163,6 +164,8 @@ SafeAir.evaluate({ pm25: 12, rain: 40, uvi: 9, feels: 25 })
 ```
 index.html   # 全部 HTML / CSS / JavaScript（內嵌，依功能分段註解）
 sw.js        # Service Worker：只負責顯示通知（手機瀏覽器需要）
+manifest.json  # PWA 設定（加入主畫面後以 App 方式開啟）
+icons/       # App 圖示：icon-192.png、icon-512.png、apple-touch-icon.png
 README.md    # 本文件
 tools/pm25_summary.py  # PM2.5 資料來源欄位摘要腳本
 ```
