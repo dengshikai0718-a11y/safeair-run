@@ -9,7 +9,7 @@ name: 測試：測站加密探測（手動＋每週檢查）
 on:
   workflow_dispatch:
   schedule:
-    - cron: '7 0 * * 1'   # UTC 週一 00:07 ＝ 台北時間週一 08:07
+    - cron: '17 0 * * 1'   # UTC 週一 00:07 ＝ 台北時間週一 08:07
 
 permissions:
   contents: read
