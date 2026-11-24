@@ -241,6 +241,8 @@ button { font: inherit; color: inherit; }
 .layer-menu button::before { content: ""; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--text-2); flex: none; }
 .layer-menu button[aria-checked="true"] { font-weight: 700; }
 .layer-menu button[aria-checked="true"]::before { border-color: var(--text); background: radial-gradient(var(--text) 0 4px, transparent 5px); }
+.heat-legend li .rng { min-width: 54px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.heat-legend li .dsc { color: var(--text-2); }
 .heat-legend .msg { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--text); }
 
 /* 降雨時間滑桿：寬螢幕在地圖下方中央；窄螢幕在 Bottom Sheet 上方 */
@@ -1528,14 +1530,35 @@ function runTests() {
   // ---- 降雨機率圖層 ----
   {
     const R = CONFIG.RAIN, g = R.grid;
-    t('降雨配色：0% 為低', rainLevel(0), 'low');
-    t('降雨配色：30% 為低', rainLevel(30), 'low');
+    t('降雨配色：0% 為淺白', rainLevel(0), 'dry');
+    t('降雨配色：9.9% 為淺白', rainLevel(9.9), 'dry');
+    t('降雨配色：10% 為淺藍', rainLevel(10), 'low');
+    t('降雨配色：30% 為淺藍', rainLevel(30), 'low');
+    t('降雨配色：燈號門檻不變（30% 綠、31% 黃、61% 紅）', [classifyIndicator('rain', 30), classifyIndicator('rain', 31), classifyIndicator('rain', 61)].join(), 'green,yellow,red');
     t('降雨配色：31% 為中', rainLevel(31), 'mid');
     t('降雨配色：60% 為中', rainLevel(60), 'mid');
     t('降雨配色：61% 為高', rainLevel(61), 'high');
     t('降雨配色：100% 為高', rainLevel(100), 'high');
     t('降雨配色：缺值為 null', rainLevel(null), null);
+    t('降雨配色：四級', Object.keys(RAIN_COLORS).join(), 'dry,low,mid,high');
     t('降雨配色：全為藍色系（不含綠黃紅）', Object.values(RAIN_COLORS).every(([r, gg, b]) => b > r && b > gg), true);
+    {
+      // 色相與相鄰級差：藍紫要偏藍（不是粉紫）；疊在淺色底圖上的相鄰兩級色差 ≥ 10（CIE76 ΔE）
+      const hueOf = ([r, gg, b]) => { const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b); if (mx === mn) return 0; const d = mx - mn;
+        const h = mx === r ? ((gg - b) / d) % 6 : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4; return Math.round(((h * 60) + 360) % 360); };
+      const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+      const lab = ([r, gg, b]) => { const R = lin(r), G = lin(gg), B = lin(b);
+        const X = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047, Y = 0.2126 * R + 0.7152 * G + 0.0722 * B, Z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
+        const f = (v) => (v > 0.008856 ? Math.cbrt(v) : 7.787 * v + 16 / 116); return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))]; };
+      const bg = [245, 245, 243], comp = (c) => c.map((v, i) => Math.round(CONFIG.HEAT.opacity * v + (1 - CONFIG.HEAT.opacity) * bg[i]));
+      const de = (a, b) => Math.hypot(...lab(a).map((v, i) => v - lab(b)[i]));
+      const hh = hueOf(RAIN_COLORS.high);
+      t('降雨配色：藍紫的色相在 250–275°（偏藍的紫，不是粉紫）', hh >= 250 && hh <= 275, true);
+      const ks = ['dry', 'low', 'mid', 'high'];
+      t('降雨配色：疊圖後相鄰兩級色差 ≥ 10（淺白→淺藍→中藍→藍紫）', ks.slice(1).every((k, i) => de(comp(RAIN_COLORS[ks[i]]), comp(RAIN_COLORS[k])) >= 10), true);
+      t('降雨配色：淺白與灰色斜線（無資料）不同色', RAIN_COLORS.dry.join() !== [203, 213, 225].join(), true);
+    }
+    t('降雨圖例：四級與文字', RAIN_LEGEND.map((l) => `${l.rng}${l.dsc}`).join('｜'), '< 10%幾乎不會下雨｜10–30%降雨機率低｜31–60%可能下雨｜> 60%很可能下雨');
     // rain.json 解析、過期與讀取失敗
     const empty = () => Array(g.rows * g.cols).fill(null);
     const hrs = (from) => Array.from({ length: R.hours }, (_, n) => hourKeyShift(from, n));
@@ -1572,11 +1595,15 @@ function runTests() {
     t('大雨曝曬：+12 小時降到 30% 以下', series[12] <= 30, true);
     t('大雨曝曬：滑桿有變化（現在與 +12 小時不同級）', rainLevel(series[0]) !== rainLevel(series[12]), true);
     t('正常：現在大致低降雨（全部節點 ≤ 30%）', normal.values.every((v) => v[0] <= 30), true);
+    t('正常：現在市內過半是淺白（< 10%）', rainAreaShare(normal, 0).dry > 0.5, true);
+    t('正常：稍後北部山區升到 31–60%（會出現中藍）', rainAreaShare(normal, 12).mid > 0.02, true);
     t('高空汙：全時段低降雨（全部節點 ≤ 30%）', pol.values.every((v) => v.every((x) => x <= 30)), true);
+    t('高空汙：全時段整個市內都是淺白（大片淺白）', [0, 6, 12].every((i) => rainAreaShare(pol, i).dry > 0.95), true);
+    t('大雨曝曬：現在出現藍紫區塊、其餘為淺藍', rainAreaShare(storm, 0).high > 0.02 && rainAreaShare(storm, 0).low > 0.5, true);
     for (const sc of ['normal', 'pollution', 'storm']) {
       const wx = buildMockWeather(sc, RUN_SPOTS.map((sp) => ({ key: `spot-${sp.id}`, spotId: sp.id, lat: sp.lat, lng: sp.lng })));
       const m = buildMockRain(sc);
-      t(`Mock 降雨與跑點降雨一致（${sc}）`, RUN_SPOTS.every((sp, i) => rainLevel(spotsAt(m, 0)[i]) === rainLevel(wx[`spot-${sp.id}`].rain)), true);
+      t(`Mock 降雨與跑點降雨燈號一致（${sc}）`, RUN_SPOTS.every((sp, i) => classifyIndicator('rain', spotsAt(m, 0)[i]) === classifyIndicator('rain', wx[`spot-${sp.id}`].rain)), true);
     }
     // 圖層三選一、圖例、時間滑桿（Mock 情境才測；不發請求）
     if (state.dataMode !== 'live') {
@@ -1598,7 +1625,9 @@ function runTests() {
         t('圖層：三選一（切到降雨會移除 PM2.5）', map.hasLayer(heatGroup) === false && !!rainImg && map.hasLayer(rainImg), true);
         t('圖層：選單只有一個選中項', checked().join(), 'rain');
         t('圖例：降雨圖例標題', q('#heatLegend .lg-full h3').textContent, '降雨機率（%）');
-        t('圖例：降雨圖例有三級門檻', q('#heatLegend .lg-full').textContent.includes('≤ 30%') && q('#heatLegend .lg-full').textContent.includes('31–60%') && q('#heatLegend .lg-full').textContent.includes('> 60%'), true);
+        t('圖例：降雨圖例有四級', ['< 10%', '10–30%', '31–60%', '> 60%', '幾乎不會下雨', '降雨機率低', '可能下雨', '很可能下雨'].every((x) => q('#heatLegend .lg-full').textContent.includes(x)), true);
+        t('圖例：降雨圖例四個色塊', document.querySelectorAll('#heatLegend .lg-full li .sw').length, 4);
+        t('圖層：降雨圖層有台北市界細線', !!rainOutline && map.hasLayer(rainOutline), true);
         t('圖例：降雨圖例註明資料來源與解析度', q('#heatLegend .lg-full .note').textContent.includes('Open-Meteo') && q('#heatLegend .lg-full .note').textContent.includes('27 km'), true);
         t('滑桿：降雨圖層出現', q('#rainBar').hidden, false);
         t('滑桿：範圍 0 到 +12（13 個時段）', q('#rainSlider').min + '-' + q('#rainSlider').max, '0-12');
@@ -1615,7 +1644,7 @@ function runTests() {
         t('無法取得：圖例也顯示提示', q('#heatLegend .lg-full').textContent.includes('降雨預報暫時無法取得'), true);
         state.rain = keep; renderRainUi();
         setLayer('pm25');
-        t('圖層：切回 PM2.5 → 降雨圖層與滑桿隱藏', !(rainImg && map.hasLayer(rainImg)) && q('#rainBar').hidden && map.hasLayer(heatGroup), true);
+        t('圖層：切回 PM2.5 → 降雨圖層與滑桿隱藏', !(rainImg && map.hasLayer(rainImg)) && !(rainOutline && map.hasLayer(rainOutline)) && q('#rainBar').hidden && map.hasLayer(heatGroup), true);
         setLayer('off');
         t('圖層：切到關閉 → 全部移除', !map.hasLayer(heatGroup) && !(rainImg && map.hasLayer(rainImg)) && q('#rainBar').hidden && q('#heatLegend').hidden, true);
         t('Mock 情境不讀 rain.json', performance.getEntriesByType('resource').some((e) => e.name.includes('rain.json')), false);
@@ -2931,25 +2960,49 @@ function heatFrame() {
    - 資料：data/rain.json（GitHub Actions 每小時向 Open-Meteo 查詢網格點，約 1.5 km 間距，目前整點起 15 個整點）。
      Open-Meteo 的降雨機率來自 0.25°（約 27 km）解析度的集合預報，網格只是內插取樣點，不代表真實解析度。
    - 網頁取「現在」起最多 13 個時段（現在、+1 … +12 小時）；網格點雙線性內插後依門檻離散上色，裁切在台北市界內。
-   - 藍色系三級（≤ 30%、31–60%、> 60%，與燈號門檻相同），避免與綠黃紅燈號混淆。
+   - 藍色系四級（< 10% 淺白、10–30% 淺藍、31–60% 中藍、> 60% 藍紫）；燈號門檻不變（≤ 30% 仍是綠燈），四級只是熱力圖的視覺分級。不含綠黃紅，避免與燈號混淆。
    - 檔案過期（> 3 小時）或讀取失敗 → 「降雨預報暫時無法取得」，不影響其他功能。
    - Mock 情境不讀 rain.json，使用同一組網格的模擬降雨（大雨曝曬：大佳與花博附近 > 60% 並逐漸減弱）。
    ===================================================================== */
-// 藍色系（淺 → 深）。透明度 0.35 會壓縮色差，所以三級刻意選用明度與飽和度差距大的藍色，且不含綠、黃、紅。
-const RAIN_COLORS = { low: [180, 215, 255], mid: [30, 144, 255], high: [10, 20, 160] };
+// 四級配色（淺白 → 淺藍 → 中藍 → 藍紫）。透明度 0.35 會壓縮色差，所以色值是依「疊在淺色底圖上的實際顏色」挑的：
+// 相鄰兩級的色差（CIE76 ΔE）在淺色底圖上 ≥ 14；藍紫用偏藍的紫（Violet-700，色相約 263°，不是粉紫），避免與 PM2.5 紅色或紅燈混淆。
+// 「淺白」本來就接近底圖（ΔE 約 2–4），所以降雨圖層另外畫一圈台北市界細線，讓整片「幾乎不會下雨」的區域看得出範圍；
+// 它也與 PM2.5 圖層「無資料」的灰色斜線不同（斜線是線條紋理，淺白是純色塊）。
+const RAIN_COLORS = { dry: [232, 242, 255], low: [125, 184, 255], mid: [29, 111, 242], high: [109, 40, 217] };
 const RAIN_LEGEND = [
-  { level: 'low',  text: '≤ 30%（低）',    short: '≤30' },
-  { level: 'mid',  text: '31–60%（中）',   short: '31–60' },
-  { level: 'high', text: '> 60%（高）',    short: '>60' },
+  { level: 'dry',  rng: '< 10%',   dsc: '幾乎不會下雨', short: '<10' },
+  { level: 'low',  rng: '10–30%',  dsc: '降雨機率低',   short: '10–30' },
+  { level: 'mid',  rng: '31–60%',  dsc: '可能下雨',     short: '31–60' },
+  { level: 'high', rng: '> 60%',   dsc: '很可能下雨',   short: '>60' },
 ];
 const RAIN_UNAVAILABLE = '降雨預報暫時無法取得';
 const RAIN_NOTE = 'Open-Meteo 氣象預報，降雨機率的原始解析度約 27 km，僅供參考';
 const RAIN_BAR_NOTE = '僅顯示降雨預報，跑點燈號為目前狀況';
 
-/** 降雨機率 → 'low' | 'mid' | 'high'（門檻與跑點燈號相同：≤ 30、31–60、> 60） */
+/**
+ * 降雨機率 → 熱力圖視覺分級 'dry'（< 10）| 'low'（10–30）| 'mid'（31–60）| 'high'（> 60）。
+ * 10 以上的三級沿用跑點燈號門檻（classifyIndicator('rain')：≤ 30 綠、31–60 黃、> 60 紅），< 10 只是把綠燈區再細分出「幾乎不會下雨」。
+ */
 function rainLevel(v) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return null;
+  if (v < 10) return 'dry';
   const lv = classifyIndicator('rain', v);
-  return lv === 'green' ? 'low' : lv === 'yellow' ? 'mid' : lv === 'red' ? 'high' : null;
+  return lv === 'green' ? 'low' : lv === 'yellow' ? 'mid' : 'high';
+}
+
+/** 某個時段在台北市界內各級的面積比例（以約 500 m 間距取樣；測試與報告用） */
+function rainAreaShare(rain, slot) {
+  const share = { dry: 0, low: 0, mid: 0, high: 0 };
+  let n = 0;
+  for (let lat = 24.96; lat <= 25.21; lat += 0.0045) {
+    for (let lng = 121.46; lng <= 121.67; lng += 0.005) {
+      if (!pointInPolygon(lat, lng)) continue;
+      const lv = rainLevel(rainInterp(rain.grid, rain.values, rain.startIdx + slot, lat, lng));
+      if (lv) { share[lv]++; n++; }
+    }
+  }
+  for (const k of Object.keys(share)) share[k] = n ? share[k] / n : 0;
+  return share;
 }
 
 /** 台北整點鍵（'YYYY-MM-DDTHH:00'）加減小時 */
@@ -2997,7 +3050,7 @@ function rainInterp(grid, values, idx, lat, lng) {
   return sw < 0.5 ? null : sv / sw;
 }
 
-/** Mock 降雨：大雨曝曬＝大佳與花博附近 > 60% 並逐時減弱；正常＝低降雨（北部山區稍後略升）；高空汙＝低降雨 */
+/** Mock 降雨：大雨曝曬＝大佳與花博附近 > 60% 並逐時減弱；正常＝低降雨（南邊 < 10%，北部山區稍後升到 31–60%）；高空汙＝全市 < 10% */
 function mockRainValue(scenario, lat, lng, t) {
   const clamp = (v) => Math.max(0, Math.min(100, Math.round(v)));
   if (scenario === 'storm') {
@@ -3008,7 +3061,7 @@ function mockRainValue(scenario, lat, lng, t) {
   if (scenario === 'pollution') return clamp(3 + 5 * (lat - 24.95) / 0.26);
   const dKm = Math.hypot((lat - 25.16) * 110.95, (lng - 121.54) * 100.8);
   const bump = Math.max(0, Math.min(1, (t - 4) / 6));
-  return clamp(9 + 7 * (lat - 24.95) / 0.26 + 22 * bump * Math.exp(-(dKm * dKm) / (2 * 3 * 3)));
+  return clamp(4 + 9 * (lat - 24.95) / 0.26 + 22 * bump * Math.exp(-(dKm * dKm) / (2 * 3 * 3)));
 }
 
 /** 產生 Mock 降雨網格（結構與 rain.json 相同；時段從目前台北整點起算） */
@@ -3057,6 +3110,7 @@ async function refreshRain() {
 
 const rainCache = new Map(); // `${來源}|${時段}` → dataURL（資料更新時清空）
 let rainImg = null;
+let rainOutline = null; // 台北市界細線：整片「淺白」時仍看得出圖層範圍
 function rainUrlFor(t) {
   const r = state.rain;
   const key = `${r.source}|${r.hours[0]}|${r.fetchedAt || ''}|${state.dataMode}|${t}`;
@@ -3092,11 +3146,17 @@ function rainUrlFor(t) {
 /** 依目前圖層與時段更新降雨圖層（顯示或移除） */
 function paintRain() {
   const show = layerMode === 'rain' && state.rain && state.rain.status === 'ok';
-  if (!show) { if (rainImg && map.hasLayer(rainImg)) map.removeLayer(rainImg); return; }
+  if (!show) {
+    if (rainImg && map.hasLayer(rainImg)) map.removeLayer(rainImg);
+    if (rainOutline && map.hasLayer(rainOutline)) map.removeLayer(rainOutline);
+    return;
+  }
   const url = rainUrlFor(state.rainSlot), F = heatFrame();
   if (!rainImg) rainImg = L.imageOverlay(url, F.bounds, { opacity: CONFIG.HEAT.opacity, interactive: false, alt: '降雨機率預報' });
   else { rainImg.setUrl(url); rainImg.setBounds(F.bounds); }
   if (!map.hasLayer(rainImg)) rainImg.addTo(map);
+  if (!rainOutline) rainOutline = L.polygon(TAIPEI_OUTLINE, { color: '#64748B', weight: 1.5, opacity: 0.6, fill: false, interactive: false });
+  if (!map.hasLayer(rainOutline)) rainOutline.addTo(map);
 }
 
 /** 時間滑桿文字：「現在｜14:00」「+3 小時｜14:00」 */
@@ -3126,9 +3186,9 @@ function renderLegend() {
   } else {
     const sw = (lv) => `rgba(${RAIN_COLORS[lv].join(',')},${op})`;
     const bad = state.rain && state.rain.status === 'unavailable';
-    full = '<h3>降雨機率（%）</h3><ul>' + RAIN_LEGEND.map((l) => `<li><span class="sw" style="background:${sw(l.level)}"></span>${l.text}</li>`).join('') + '</ul>' +
+    full = '<h3>降雨機率（%）</h3><ul>' + RAIN_LEGEND.map((l) => `<li><span class="sw" style="background:${sw(l.level)}"></span><span class="rng">${l.rng.replace('<', '&lt;').replace('>', '&gt;')}</span><span class="dsc">${l.dsc}</span></li>`).join('') + '</ul>' +
       (bad ? `<p class="msg">${RAIN_UNAVAILABLE}</p>` : '') + `<p class="note">${RAIN_NOTE}。</p>`;
-    compact = '降雨 ' + RAIN_LEGEND.map((l) => `<span class="i"><span class="sw" style="background:${sw(l.level)}"></span>${l.short}</span>`).join('');
+    compact = '降雨 ' + RAIN_LEGEND.map((l) => `<span class="i"><span class="sw" style="background:${sw(l.level)}"></span>${l.short.replace('<', '&lt;').replace('>', '&gt;')}</span>`).join('');
     label = '降雨機率圖例';
   }
   legend.innerHTML = `<button type="button" class="lg-compact" aria-expanded="${legend.classList.contains('expanded')}" aria-label="${label}，點一下展開說明">${compact}</button><div class="lg-full">${full}</div>`;
@@ -3883,7 +3943,7 @@ window.SafeAir = {
   RUN_SPOTS, CONFIG, PM25_SOURCES, state, getFavStore: () => favStore, createFavStore, validateFavName, haversine, selectSpot,
   idwEstimate, moenvAdapter, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
-  setLayer, getLayer: () => layerMode, getRain: () => state.rain, parseRain, rainStateFrom, buildMockRain, rainInterp, rainLevel, pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, getHeatField: () => heatField, heatValueAt, heatPixelAt, buildHeatField,
+  setLayer, getLayer: () => layerMode, getRain: () => state.rain, parseRain, rainStateFrom, buildMockRain, rainInterp, rainLevel, rainAreaShare, RAIN_COLORS, pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, getHeatField: () => heatField, heatValueAt, heatPixelAt, buildHeatField,
 };
 
 bootstrap();
