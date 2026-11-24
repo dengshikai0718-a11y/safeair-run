@@ -1558,6 +1558,17 @@ function runTests() {
       t('降雨配色：疊圖後相鄰兩級色差 ≥ 10（淺白→淺藍→中藍→藍紫）', ks.slice(1).every((k, i) => de(comp(RAIN_COLORS[ks[i]]), comp(RAIN_COLORS[k])) >= 10), true);
       t('降雨配色：淺白與灰色斜線（無資料）不同色', RAIN_COLORS.dry.join() !== [203, 213, 225].join(), true);
     }
+    t('降雨圖例：說明「預報以方格計算，邊界可能呈直線」', RAIN_NOTE.includes('預報以方格計算，邊界可能呈直線'), true);
+    {
+      // 回歸：所有節點同值時，內插結果不可因浮點誤差在門檻兩側跳動（曾造成降雨圖藍色區內散布細小白點）
+      const cg = CONFIG.RAIN.grid;
+      const flat = (v) => ({ grid: cg, values: Array.from({ length: cg.rows * cg.cols }, () => [v]), startIdx: 0 });
+      let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      const pts = []; while (pts.length < 600) { const la = 24.96 + rnd() * 0.25, ln = 121.46 + rnd() * 0.21; if (pointInPolygon(la, ln)) pts.push([la, ln]); }
+      const spread = (v) => new Set(pts.map(([la, ln]) => rainLevel(rainInterp(cg, flat(v).values, 0, la, ln)))).size;
+      t('降雨內插：全部節點同值（10%、30%、31%、60%、61%、9%）時整片同一級，沒有雜點', [0, 9, 10, 30, 31, 60, 61, 100].map(spread).join(), '1,1,1,1,1,1,1,1');
+      t('降雨內插：剛好 10% 不會被判成淺白', rainLevel(rainInterp(cg, flat(10).values, 0, 25.05, 121.52)), 'low');
+    }
     t('降雨圖例：四級與文字', RAIN_LEGEND.map((l) => `${l.rng}${l.dsc}`).join('｜'), '< 10%幾乎不會下雨｜10–30%降雨機率低｜31–60%可能下雨｜> 60%很可能下雨');
     // rain.json 解析、過期與讀取失敗
     const empty = () => Array(g.rows * g.cols).fill(null);
@@ -1870,6 +1881,28 @@ function runTests() {
     t('一般點空白處仍取消選取', state.searchPlace, null);
     t('取消後移除圖釘', document.querySelectorAll('.search-marker').length, 0);
     state.selectedId = saved.sel; state.cardFocus = saved.focus; state.searchPlace = saved.place; render();
+  }
+  // PM2.5 熱力圖沒有細小雜點：同級連通區塊的像素數都 > 12（以目前資料檢查）
+  if (state.data && heatField) {
+    const { W, H, values } = heatField, names = ['green', 'yellow', 'red'];
+    const lv = new Int8Array(W * H).fill(-1);
+    for (let i = 0; i < W * H; i++) if (!Number.isNaN(values[i])) lv[i] = names.indexOf(classifyIndicator('pm25', values[i]));
+    const seen = new Uint8Array(W * H); let tiny = 0;
+    for (let i = 0; i < W * H; i++) {
+      if (lv[i] < 0 || seen[i]) continue;
+      const stack = [i]; seen[i] = 1; let n = 0;
+      while (stack.length) {
+        const k = stack.pop(); n++; const x = k % W, y = (k - x) / W;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          const j = ny * W + nx;
+          if (!seen[j] && lv[j] === lv[k]) { seen[j] = 1; stack.push(j); }
+        }
+      }
+      if (n <= 12) tiny++;
+    }
+    cases.push({ name: 'PM2.5 熱力圖沒有細小雜點（≤ 12 像素的同級區塊）', expected: 0, actual: tiny, ok: tiny === 0 });
   }
   // 熱力圖與跑點一致：每個跑點位置的熱力圖等級必須等於該跑點 PM2.5 的單項燈號（以目前資料模式的熱力圖檢查）
   if (state.data && heatField) {
@@ -2976,7 +3009,7 @@ const RAIN_LEGEND = [
   { level: 'high', rng: '> 60%',   dsc: '很可能下雨',   short: '>60' },
 ];
 const RAIN_UNAVAILABLE = '降雨預報暫時無法取得';
-const RAIN_NOTE = 'Open-Meteo 氣象預報，降雨機率的原始解析度約 27 km，僅供參考';
+const RAIN_NOTE = 'Open-Meteo 氣象預報，降雨機率的原始解析度約 27 km，僅供參考。預報以方格計算，邊界可能呈直線';
 const RAIN_BAR_NOTE = '僅顯示降雨預報，跑點燈號為目前狀況';
 
 /**
@@ -3047,7 +3080,8 @@ function rainInterp(grid, values, idx, lat, lng) {
       sw += w; sv += w * v;
     }
   }
-  return sw < 0.5 ? null : sv / sw;
+  // 四捨五入到 0.01：四個節點同值時，浮點誤差（約 1e-15）會讓內插結果在門檻（例如剛好 10%）兩側隨機跳動，畫出散布的細小雜點
+  return sw < 0.5 ? null : Math.round(sv / sw * 100) / 100;
 }
 
 /** Mock 降雨：大雨曝曬＝大佳與花博附近 > 60% 並逐時減弱；正常＝低降雨（南邊 < 10%，北部山區稍後升到 31–60%）；高空汙＝全市 < 10% */

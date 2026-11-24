@@ -8,7 +8,10 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '45 * * * *'   # 分鐘數在 UTC 與台北時間相同：每小時第 45 分
+    # 每小時第 15、45 分（分鐘數在 UTC 與台北時間相同）。GitHub 的排程常延遲 30–90 分鐘、偶爾整個跳過，
+    # 實測約每 1–2 小時才跑一次；一小時排兩次可降低「資料超過 3 小時」的機率。
+    # 降雨預報 50 分鐘內不重複查 Open-Meteo（fetch_rain.py --min-age-min），所以不會多耗額度。
+    - cron: '15,45 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -26,7 +29,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     steps:
       - name: 取得程式碼
         uses: actions/checkout@v7
@@ -57,4 +60,15 @@ jobs:
 
       - name: 部署
         id: deployment
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+
+      # 偶爾會出現「No artifacts named github-pages were found」（上傳成功但 GitHub 還查不到），等一下再試一次通常就好
+      - name: 等 30 秒後重試部署
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+
+      - name: 部署（重試）
+        id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v5
