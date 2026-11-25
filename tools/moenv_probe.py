@@ -24,7 +24,7 @@ TPE = timezone(timedelta(hours=8))
 # 與 index.html CONFIG.BBOX 相同的台北範圍框，以及向外約 10 km 的「含鄰近新北」範圍框
 BBOX = dict(min_lng=121.45, max_lng=121.67, min_lat=24.96, max_lat=25.21)
 BBOX_EXT = dict(min_lng=121.35, max_lng=121.77, min_lat=24.87, max_lat=25.30)
-SPOTS = [  # 與 index.html RUN_SPOTS 相同（只用於計算最近測站距離）
+SPOTS = [  # 階段 A 時 index.html 的 5 個跑點（現為 SPOTS 的 id 1–5；只用於計算最近測站距離）
     ('大安森林公園', 25.02970, 121.53629), ('大佳河濱公園', 25.07471, 121.54111),
     ('國立中正紀念堂', 25.03556, 121.52024), ('花博公園新生園區', 25.06999, 121.53124),
     ('青年公園', 25.02306, 121.50526),

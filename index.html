@@ -232,6 +232,10 @@ button { font: inherit; color: inherit; }
 }
 .heat-btn:hover { background: var(--hover); }
 .heat-btn:not([data-layer="off"]) { background: var(--text); color: #fff; }
+.heat-btn.sport-btn { background: var(--surface); color: var(--text); } /* 運動模式按鈕不是圖層開關，維持白底 */
+.heat-btn.sport-btn:hover { background: var(--hover); }
+.ctl-row { display: flex; gap: 8px; align-items: flex-start; }
+.ctl-item { position: relative; }
 .layer-menu { position: absolute; top: calc(var(--touch) + 6px); right: 0; z-index: 2; min-width: 168px; padding: 6px; background: var(--surface);
               border-radius: var(--radius); box-shadow: var(--shadow); display: grid; gap: 2px; }
 .layer-menu[hidden] { display: none; }
@@ -266,11 +270,19 @@ button { font: inherit; color: inherit; }
 .heat-legend .sw { width: 20px; height: 14px; border-radius: 3px; border: 1px solid var(--line); flex: none; }
 .heat-legend .sw.blank { background: repeating-linear-gradient(45deg, #fff 0 5px, #CBD5E1 5px 6px); }
 .heat-legend .note { margin: 8px 0 0; font-size: 12px; color: var(--text-2); line-height: 1.5; }
+/* 資訊卡：點位特色、遮雨與備註 */
+.card-facts { margin: 10px 0 0; }
+.card-desc { margin: 0; font-size: 13px; color: var(--text); line-height: 1.5; }
+.card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.card-tags span { padding: 2px 8px; border-radius: 10px; background: var(--hover); font-size: 12px; color: var(--text); }
 /* 窄螢幕：搜尋列（高 48px）下方右側，單一圓形按鈕（圖例收在其面板內） */
 /* 圖例：寬螢幕為完整面板；窄螢幕預設為單行小圖例（不遮住跑點），點一下才展開完整說明 */
 .lg-compact { display: none; }
 @media (max-width: 767.98px) {
-  #heatCtl { top: calc(12px + 48px + 10px + env(safe-area-inset-top)); flex-direction: row-reverse; align-items: center; }
+  /* 兩顆圓形鈕（運動模式、圖層）＋單行小圖例；放不下時（約 < 380px）小圖例自動換到按鈕下一行 */
+  #heatCtl { top: calc(12px + 48px + 10px + env(safe-area-inset-top)); left: 12px; flex-direction: row-reverse; flex-wrap: wrap;
+             align-items: center; pointer-events: none; }
+  #heatCtl > * { pointer-events: auto; }
   .heat-btn { width: var(--touch); padding: 0; border-radius: 50%; }
   .heat-btn .label { display: none; }
   .heat-legend { width: auto; padding: 0; background: none; box-shadow: none; border-radius: 0; }
@@ -499,6 +511,7 @@ button { font: inherit; color: inherit; }
   <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
   <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.9 5.9 6.5.95-4.7 4.6 1.1 6.5L12 17.7l-5.8 3.05 1.1-6.5-4.7-4.6 6.5-.95z"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.7 5.7c3.1 3.4 3.1 9.2 0 12.6M18.3 5.7c-3.1 3.4-3.1 9.2 0 12.6"/></symbol>
   <symbol id="i-run" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="1.8"/><path d="M8 21l3-6 3 2v5"/><path d="M6 12l2-4 4-1 3 3 3 1"/><path d="M11 15l1-5"/></symbol>
 </svg>
 
@@ -524,7 +537,7 @@ button { font: inherit; color: inherit; }
       <div class="js-card" aria-live="polite"></div>
       <!-- 我的最愛：位於資訊卡下方、跑點列表上方 -->
       <section class="favs js-favs" aria-label="我的最愛"></section>
-      <h2 class="sb-section-title">跑點列表</h2>
+      <h2 class="sb-section-title js-list-title">跑點列表</h2>
       <ul class="spot-list js-spotlist"></ul>
     </div>
     <!-- 側邊欄底部：資料更新時間、資料來源狀態、資料模式切換 -->
@@ -570,6 +583,19 @@ button { font: inherit; color: inherit; }
     <div id="alerts"></div>
     <!-- 熱力圖開關與圖例（§11） -->
     <div id="heatCtl">
+      <div class="ctl-row">
+      <!-- 運動模式（單選）：外觀與互動比照圖層選單 -->
+      <div class="ctl-item">
+        <button type="button" id="sportBtn" class="heat-btn sport-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="sportMenu"
+                aria-label="運動模式：慢跑（走路）（點擊切換）" title="運動模式">
+          <svg class="icon" id="sportBtnIcon"><use href="#i-run"/></svg><span class="label" id="sportBtnLabel">慢跑（走路）</span>
+        </button>
+        <div id="sportMenu" class="layer-menu" role="menu" aria-label="運動模式" hidden>
+          <button type="button" role="menuitemradio" aria-checked="true" data-sport="running">慢跑（走路）</button>
+          <button type="button" role="menuitemradio" aria-checked="false" data-sport="basketball">籃球</button>
+        </div>
+      </div>
+      <div class="ctl-item">
       <button type="button" id="heatBtn" class="heat-btn" data-layer="off" aria-haspopup="menu" aria-expanded="false" aria-controls="layerMenu"
               aria-label="地圖圖層：關閉（點擊切換）" title="地圖圖層">
         <svg class="icon"><use href="#i-layers"/></svg><span class="label" id="heatBtnLabel">圖層</span>
@@ -578,6 +604,8 @@ button { font: inherit; color: inherit; }
         <button type="button" role="menuitemradio" aria-checked="false" data-layer="pm25">PM2.5</button>
         <button type="button" role="menuitemradio" aria-checked="false" data-layer="rain">降雨機率</button>
         <button type="button" role="menuitemradio" aria-checked="true" data-layer="off">關閉</button>
+      </div>
+      </div>
       </div>
       <div id="heatLegend" class="heat-legend" hidden></div>
     </div>
@@ -590,7 +618,7 @@ button { font: inherit; color: inherit; }
         <div class="js-card" aria-live="polite"></div>
         <div class="sheet-more">
           <section class="favs js-favs" aria-label="我的最愛"></section>
-          <h2 class="sb-section-title">跑點列表</h2>
+          <h2 class="sb-section-title js-list-title">跑點列表</h2>
           <ul class="spot-list js-spotlist"></ul>
         </div>
       </div>
@@ -605,23 +633,59 @@ button { font: inherit; color: inherit; }
 'use strict';
 
 /* =====================================================================
-   §1 資料：跑點資料集（放在最前面；新增跑點只需在此陣列加一筆）
+   §1 資料：運動點位資料集（放在最前面；新增點位只需在此陣列加一筆）
    ---------------------------------------------------------------------
-   結構：{ id, name, district, type, lat, lng, desc }
-   - type：'riverside'（河濱）或 'park'（公園）
-   - lat / lng 已由使用者核對，請勿修改
+   結構：{ id, name, city, district, type, sports, covered, lat, lng, desc, note? }
+   - city：目前一律「臺北市」；顯示與搜尋的行政區為 city + district（為日後擴充新北、桃園做準備）
+   - type：'riverside'（河濱）、'park'（公園）、'track'（田徑場）、'trail'（步道）、'court'（球場）
+   - sports：陣列，'running'（慢跑／走路）或 'basketball'（籃球）；運動模式只顯示含該運動的點位
+   - covered：是否有遮雨（true／false／null＝未知；null 不顯示）
+   - note：選填，顯示在資訊卡（例如開放時間）
+   - id 為整數且不可重複使用（我的最愛以 id 參照）；lat / lng 由專案擁有者在地圖上取得，請勿修改
    ===================================================================== */
-const RUN_SPOTS = [
-  { id: 1, name: '大安森林公園',     district: '大安區', type: 'park',      lat: 25.02970, lng: 121.53629,
-    desc: '市中心大型林蔭公園，環狀步道平坦、遮蔭充足' },
-  { id: 2, name: '大佳河濱公園',     district: '中山區', type: 'riverside', lat: 25.07471, lng: 121.54111,
-    desc: '沿基隆河岸，視野開闊、少紅綠燈' },
-  { id: 3, name: '國立中正紀念堂',   district: '中正區', type: 'park',      lat: 25.03556, lng: 121.52024,
-    desc: '廣場與外圍環狀步道，地勢平坦、夜間照明佳' },
-  { id: 4, name: '花博公園新生園區', district: '中山區', type: 'park',      lat: 25.06999, lng: 121.53124,
-    desc: '園區步道串連花圃與草坪，動線寬敞、適合輕鬆跑' },
-  { id: 5, name: '青年公園',         district: '萬華區', type: 'park',      lat: 25.02306, lng: 121.50526,
-    desc: '設有田徑場與林蔭步道，適合繞圈練跑' },
+const SPOTS = [
+  { id: 1, name: '大安森林公園', city: '臺北市', district: '大安區', type: 'park', sports: ['running'], covered: null,
+    lat: 25.02970, lng: 121.53629, desc: '市中心大型林蔭公園，環狀步道平坦、遮蔭充足' },
+  { id: 2, name: '大佳河濱公園', city: '臺北市', district: '中山區', type: 'riverside', sports: ['running'], covered: null,
+    lat: 25.07471, lng: 121.54111, desc: '沿基隆河岸，視野開闊、少紅綠燈' },
+  { id: 3, name: '國立中正紀念堂', city: '臺北市', district: '中正區', type: 'park', sports: ['running'], covered: null,
+    lat: 25.03556, lng: 121.52024, desc: '廣場與外圍環狀步道，地勢平坦、夜間照明佳' },
+  { id: 4, name: '花博公園新生園區', city: '臺北市', district: '中山區', type: 'park', sports: ['running'], covered: null,
+    lat: 25.06999, lng: 121.53124, desc: '園區步道串連花圃與草坪，動線寬敞、適合輕鬆跑' },
+  { id: 5, name: '青年公園', city: '臺北市', district: '萬華區', type: 'park', sports: ['running'], covered: null,
+    lat: 25.02306, lng: 121.50526, desc: '設有田徑場與林蔭步道，適合繞圈練跑' },
+  { id: 6, name: '彩虹河濱公園', city: '臺北市', district: '內湖區', type: 'riverside', sports: ['running'], covered: null,
+    lat: 25.05995, lng: 121.57226, desc: '基隆河畔、彩虹橋旁，河濱步道平坦開闊' },
+  { id: 7, name: '公館水岸廣場', city: '臺北市', district: '中正區', type: 'riverside', sports: ['running'], covered: null,
+    lat: 25.01169, lng: 121.52899, desc: '新店溪畔的水岸廣場，可接河濱步道，交通方便' },
+  { id: 8, name: '大稻埕碼頭', city: '臺北市', district: '大同區', type: 'riverside', sports: ['running'], covered: null,
+    lat: 25.05681, lng: 121.50778, desc: '淡水河畔，堤外步道平坦開闊，傍晚可看夕陽' },
+  { id: 9, name: '道南河濱公園', city: '臺北市', district: '文山區', type: 'riverside', sports: ['running'], covered: null,
+    lat: 24.98124, lng: 121.56769, desc: '景美溪畔的河濱步道，地勢平坦、人潮較少' },
+  { id: 10, name: '百齡／洲美河濱', city: '臺北市', district: '士林區', type: 'riverside', sports: ['running'], covered: null,
+    lat: 25.08751, lng: 121.51274, desc: '基隆河沿岸的長距離河濱步道，適合長跑' },
+  { id: 11, name: '臺大田徑場', city: '臺北市', district: '大安區', type: 'track', sports: ['running'], covered: null,
+    lat: 25.01983, lng: 121.53489, desc: '標準 400 公尺跑道，適合配速與間歇訓練', note: '開放時間依場館公告' },
+  { id: 12, name: '臺北田徑場', city: '臺北市', district: '松山區', type: 'track', sports: ['running'], covered: null,
+    lat: 25.04981, lng: 121.55165, desc: '市中心的標準田徑場，適合配速與間歇訓練', note: '開放時間依場館公告' },
+  { id: 13, name: '國父紀念館（中山公園）', city: '臺北市', district: '信義區', type: 'park', sports: ['running'], covered: null,
+    lat: 25.03877, lng: 121.55986, desc: '環館步道平坦、綠蔭多，市區方便抵達' },
+  { id: 14, name: '大湖公園', city: '臺北市', district: '內湖區', type: 'park', sports: ['running'], covered: null,
+    lat: 25.08263, lng: 121.60318, desc: '環湖步道搭配錦帶橋景觀，步道平緩' },
+  { id: 15, name: '天母運動公園', city: '臺北市', district: '士林區', type: 'park', sports: ['running'], covered: null,
+    lat: 25.11504, lng: 121.53431, desc: '運動設施齊全的社區運動公園，步道寬敞' },
+  { id: 16, name: '南港公園', city: '臺北市', district: '南港區', type: 'park', sports: ['running'], covered: null,
+    lat: 25.04319, lng: 121.59268, desc: '園內有湖與林蔭步道，適合輕鬆跑' },
+  { id: 17, name: '象山步道', city: '臺北市', district: '信義區', type: 'trail', sports: ['running'], covered: null,
+    lat: 25.02530, lng: 121.57927, desc: '登山步道，可俯瞰信義區，適合爬坡與肌力訓練', note: '多為階梯，適合爬坡訓練' },
+  { id: 18, name: '社子島河濱', city: '臺北市', district: '士林區', type: 'riverside', sports: ['running'], covered: null,
+    lat: 25.11070, lng: 121.46611, desc: '基隆河與淡水河交會處，腹地開闊、車少安靜' },
+  { id: 19, name: '外雙溪河濱', city: '臺北市', district: '士林區', type: 'riverside', sports: ['running'], covered: null,
+    lat: 25.09999, lng: 121.52803, desc: '雙溪沿岸的河濱步道，綠意多、適合輕鬆跑' },
+  { id: 20, name: '關渡河濱公園', city: '臺北市', district: '北投區', type: 'riverside', sports: ['running'], covered: null,
+    lat: 25.11992, lng: 121.46948, desc: '淡水河畔，視野開闊，可眺望觀音山' },
+  { id: 21, name: '社子大橋籃球場', city: '臺北市', district: '士林區', type: 'court', sports: ['basketball'], covered: false,
+    lat: 25.11178, lng: 121.49474, desc: '社子大橋旁的河濱戶外籃球場，場地開闊' },
 ];
 
 /* =====================================================================
@@ -702,7 +766,34 @@ const DATA_MODES = [
 ];
 
 // 跑點類型的中文顯示
-const SPOT_TYPE_LABEL = { riverside: '河濱', park: '公園' };
+const SPOT_TYPE_LABEL = { riverside: '河濱', park: '公園', track: '田徑場', trail: '步道', court: '球場' };
+const COVERED_LABEL = { true: '有遮雨棚', false: '無遮蔽' };
+/** 點位的行政區顯示：city + district（例：臺北市大安區） */
+const spotArea = (sp) => `${sp.city}${sp.district}`;
+
+/* ---------------------------------------------------------------------
+   運動模式（單選；記在 localStorage）。燈號門檻目前兩種模式共用，籃球專屬門檻留到階段 E。
+   --------------------------------------------------------------------- */
+const SPORTS = {
+  running:    { label: '慢跑（走路）', unit: '跑點', icon: 'i-run' },
+  basketball: { label: '籃球',         unit: '球場', icon: 'i-ball' },
+};
+const SPORT_KEY = 'safeair.sport';
+const SPORT_DEFAULT = 'running';
+function loadSport(store) {
+  try { const v = (store || localStorage).getItem(SPORT_KEY); return SPORTS[v] ? v : SPORT_DEFAULT; } catch (e) { return SPORT_DEFAULT; }
+}
+function saveSport(v) {
+  try { localStorage.setItem(SPORT_KEY, v); return true; } catch (e) { return false; }
+}
+/** 列表 / 推薦區的文字（依運動模式） */
+function sportText(sport = state.sport) {
+  const u = SPORTS[sport].unit;
+  return { list: `${u}列表`, near: `附近${u}`, alt: `替代${u}`, unit: u,
+           altEmpty: `附近暫無更佳${u}，建議改至室內運動`, nearEmpty: `5 公里內沒有收錄的${u}` };
+}
+/** 目前運動模式要顯示的點位 */
+const visibleSpots = (sport = state.sport) => SPOTS.filter((sp) => sp.sports.includes(sport));
 
 // 狀態外觀（色彩＋圖示＋繁體文字三者同時出現）；判定邏輯於第 3 階段實作
 const STATUS_META = {
@@ -723,7 +814,7 @@ const STATUS_META = {
      spots：指定跑點的覆寫值（以 id 指定，此處為唯一允許寫死跑點的地方）。
        若覆寫含 pm25，會在該跑點旁 ~11 公尺放一個錨點測站，
        IDW「< 50 公尺直接採用」規則會讓跑點取得此值，熱力圖也與資訊卡一致。
-     跑點若不在 RUN_SPOTS 中，其覆寫會被自動忽略。
+     跑點若不在 SPOTS 中，其覆寫會被自動忽略。
    ===================================================================== */
 const MOCK_STATIONS = [
   { id: 'm01', name: '北投',   lat: 25.132, lng: 121.501, pm: 9 },
@@ -758,7 +849,8 @@ const MOCK_STATIONS = [
 ];
 
 const MOCK_SCENARIOS = {
-  // 正常：混合三種燈號 → 青年公園 🔴（PM2.5 偏高）、大佳河濱公園 🟡（河岸無遮蔭、紫外線偏強）、其餘 🟢
+  // 正常：混合三種燈號 → 青年公園 🔴（PM2.5 偏高）、大佳河濱公園 🟡（河岸無遮蔭、紫外線偏強）、
+  //       大稻埕碼頭 🟡（靠近萬華一帶的高 PM2.5 測站，推估約 16.5）、其餘（含社子大橋籃球場）🟢
   normal: {
     label: '正常',
     stationPm: (st) => st.pm,
@@ -771,7 +863,7 @@ const MOCK_SCENARIOS = {
       5: { pm25: 38.0 },             // 青年公園 → 🔴
     },
   },
-  // 高空汙：大佳河濱公園 PM2.5 落在黃燈，其餘四點 ≥ 35.5
+  // 高空汙：大佳河濱公園 PM2.5 落在黃燈，其餘點位（含籃球場）≥ 35.5 → 🔴
   pollution: {
     label: '高空汙',
     stationPm: (st) => (st.pol !== undefined ? st.pol : Math.round((st.pm * 1.5 + 32) * 10) / 10),
@@ -784,15 +876,13 @@ const MOCK_SCENARIOS = {
       5: { pm25: 58.0 },
     },
   },
-  // 大雨曝曬：大佳河濱公園與花博新生園區降雨機率 > 60%，其餘三點 UVI ≥ 8（基準值 9）
+  // 大雨曝曬：大佳河濱公園與花博新生園區一帶降雨機率 > 60%（取自 Mock 降雨網格），其餘點位 UVI ≥ 8（基準值 9）
   storm: {
     label: '大雨曝曬',
     stationPm: (st) => Math.round(st.pm * 0.6 * 10) / 10, // 雨水洗刷，空品較佳
     weather: { rain: 20, uvi: 9.0, feels: 29.0 },
-    spots: {
-      2: { rain: 80, uvi: 2.0 },     // 大佳河濱公園
-      4: { rain: 75, uvi: 2.0 },     // 花博公園新生園區
-    },
+    stormUviInRain: 2.0,             // 降雨 > 60% 的地方（大佳、花博一帶）紫外線 2
+    spots: {},
   },
 };
 
@@ -1092,7 +1182,7 @@ function buildMockStations(scenarioId, now = new Date()) {
     id: st.id, name: `${st.name}（模擬）`, lat: st.lat, lng: st.lng,
     pm25: sc.stationPm(st), time: new Date(now - ((i * 7) % 15) * 60e3),
   }));
-  for (const spot of RUN_SPOTS) {
+  for (const spot of SPOTS) {
     const ov = sc.spots[spot.id];
     if (ov && ov.pm25 !== undefined) {
       stations.push({ id: `anchor-${spot.id}`, name: `${spot.name}旁（模擬）`,
@@ -1102,21 +1192,26 @@ function buildMockStations(scenarioId, now = new Date()) {
   return stations;
 }
 
-/** 產生 Mock 氣象：跑點＝情境基準值＋覆寫；其他座標（如使用者位置）採最近跑點的值 */
+/** Mock 降雨網格快取（每個情境的數值與時間無關，只需算一次） */
+const mockRainCache = {};
+function mockRainGrid(scenarioId) { return mockRainCache[scenarioId] || (mockRainCache[scenarioId] = buildMockRain(scenarioId)); }
+
+/** 產生 Mock 氣象：紫外線、體感＝情境基準值＋點位覆寫（其他座標採最近點位的覆寫）；降雨取自 Mock 降雨網格 */
 function buildMockWeather(scenarioId, points) {
   const sc = MOCK_SCENARIOS[scenarioId];
-  const spotWx = (spot) => {
-    const ov = sc.spots[spot.id] || {};
-    return {
-      rain: ov.rain !== undefined ? ov.rain : sc.weather.rain,
-      uvi: ov.uvi !== undefined ? ov.uvi : sc.weather.uvi,
-      feels: ov.feels !== undefined ? ov.feels : sc.weather.feels,
-    };
-  };
+  // 降雨機率一律取自同情境的 Mock 降雨網格（「現在」時段），所有點位與降雨圖層一致；
+  // 大雨曝曬情境中降雨 > 60% 的地方紫外線降為 2（雨區沒有大太陽）
+  const g = mockRainGrid(scenarioId);
   const byKey = {};
   for (const p of points) {
-    const spot = p.spotId !== undefined ? RUN_SPOTS.find((s) => s.id === p.spotId) : nearestSpot(p.lat, p.lng);
-    byKey[p.key] = spotWx(spot);
+    const spot = p.spotId !== undefined ? SPOTS.find((s) => s.id === p.spotId) : nearestSpot(p.lat, p.lng);
+    const ov = (spot && sc.spots[spot.id]) || {};
+    const rainV = ov.rain !== undefined ? ov.rain : Math.round(rainInterp(g.grid, g.values, 0, p.lat, p.lng) ?? sc.weather.rain);
+    byKey[p.key] = {
+      rain: rainV,
+      uvi: ov.uvi !== undefined ? ov.uvi : (sc.stormUviInRain !== undefined && rainV > 60 ? sc.stormUviInRain : sc.weather.uvi),
+      feels: ov.feels !== undefined ? ov.feels : sc.weather.feels,
+    };
   }
   return byKey;
 }
@@ -1135,7 +1230,7 @@ function districtOf(lat, lng) {
 /** 找出離指定座標最近的跑點 */
 function nearestSpot(lat, lng) {
   let best = null, bestD = Infinity;
-  for (const s of RUN_SPOTS) {
+  for (const s of SPOTS) {
     const d = haversine(lat, lng, s.lat, s.lng);
     if (d < bestD) { best = s; bestD = d; }
   }
@@ -1144,7 +1239,7 @@ function nearestSpot(lat, lng) {
 
 /** 氣象查詢點：所有跑點＋（若已定位）使用者位置 */
 function weatherPoints() {
-  const pts = RUN_SPOTS.map((s) => ({ key: `spot-${s.id}`, spotId: s.id, lat: s.lat, lng: s.lng }));
+  const pts = SPOTS.map((s) => ({ key: `spot-${s.id}`, spotId: s.id, lat: s.lat, lng: s.lng }));
   if (state.userPos) pts.push({ key: 'user', lat: state.userPos.lat, lng: state.userPos.lng });
   if (state.searchPlace && state.searchPlace.inTaipei) pts.push({ key: 'search', lat: state.searchPlace.lat, lng: state.searchPlace.lng });
   // 我的最愛的自選點位：與跑點同一次批次查詢（Open-Meteo 多座標請求）
@@ -1203,7 +1298,7 @@ function computeReadings() {
              rain: toNum(w.rain), uvi: toNum(w.uvi), feels: toNum(w.feels) };
   };
   state.readings = {};
-  for (const s of RUN_SPOTS) state.readings[s.id] = readingAt(s.lat, s.lng, `spot-${s.id}`);
+  for (const s of SPOTS) state.readings[s.id] = readingAt(s.lat, s.lng, `spot-${s.id}`);
   state.userReading = state.userPos ? readingAt(state.userPos.lat, state.userPos.lng, 'user') : null;
   const sp = state.searchPlace;
   state.searchReading = sp && sp.inTaipei && wx.byKey.search ? readingAt(sp.lat, sp.lng, 'search') : null;
@@ -1438,7 +1533,7 @@ function adviceFor(ev) {
 /** 依目前讀值計算所有跑點與使用者位置的判定結果 */
 function computeEvaluations() {
   state.evaluations = {};
-  for (const s of RUN_SPOTS) {
+  for (const s of SPOTS) {
     if (state.readings[s.id]) state.evaluations[s.id] = evaluate(state.readings[s.id]);
   }
   state.userEvaluation = state.userReading ? evaluate(state.userReading) : null;
@@ -1593,14 +1688,15 @@ function runTests() {
     t('降雨預報無法取得文字', RAIN_UNAVAILABLE, '降雨預報暫時無法取得');
     // Mock 降雨網格
     const val = (m, lat, lng, i) => rainInterp(m.grid, m.values, i, lat, lng);
-    const spotsAt = (m, i) => RUN_SPOTS.map((sp) => val(m, sp.lat, sp.lng, i));
+    const spotsAt = (m, i) => SPOTS.map((sp) => val(m, sp.lat, sp.lng, i));
     const storm = buildMockRain('storm'), normal = buildMockRain('normal'), pol = buildMockRain('pollution');
     t('Mock 降雨：13 個時段可用', storm.slots, 13);
     t('Mock 降雨：網格與設定相同', storm.grid, g);
-    const dj = RUN_SPOTS.find((x) => x.id === 2), hb = RUN_SPOTS.find((x) => x.id === 4);
+    const dj = SPOTS.find((x) => x.id === 2), hb = SPOTS.find((x) => x.id === 4);
     t('大雨曝曬：大佳 > 60%', val(storm, dj.lat, dj.lng, 0) > 60, true);
     t('大雨曝曬：花博 > 60%', val(storm, hb.lat, hb.lng, 0) > 60, true);
-    t('大雨曝曬：其餘三個跑點 ≤ 30%', RUN_SPOTS.filter((x) => x.id !== 2 && x.id !== 4).every((x) => val(storm, x.lat, x.lng, 0) <= 30), true);
+    t('大雨曝曬：大安、中正紀念堂、青年公園 ≤ 30%', SPOTS.filter((x) => [1, 3, 5].includes(x.id)).every((x) => val(storm, x.lat, x.lng, 0) <= 30), true);
+    t('大雨曝曬：降雨 > 60% 的點位只有大佳、花博', SPOTS.filter((x) => val(storm, x.lat, x.lng, 0) > 60).map((x) => x.id).join(), '2,4');
     const series = Array.from({ length: 13 }, (_, i) => val(storm, dj.lat, dj.lng, i));
     t('大雨曝曬：大佳降雨逐時減弱', series.every((v, i) => i === 0 || v <= series[i - 1]), true);
     t('大雨曝曬：+12 小時降到 30% 以下', series[12] <= 30, true);
@@ -1612,9 +1708,9 @@ function runTests() {
     t('高空汙：全時段整個市內都是淺白（大片淺白）', [0, 6, 12].every((i) => rainAreaShare(pol, i).dry > 0.95), true);
     t('大雨曝曬：現在出現藍紫區塊、其餘為淺藍', rainAreaShare(storm, 0).high > 0.02 && rainAreaShare(storm, 0).low > 0.5, true);
     for (const sc of ['normal', 'pollution', 'storm']) {
-      const wx = buildMockWeather(sc, RUN_SPOTS.map((sp) => ({ key: `spot-${sp.id}`, spotId: sp.id, lat: sp.lat, lng: sp.lng })));
+      const wx = buildMockWeather(sc, SPOTS.map((sp) => ({ key: `spot-${sp.id}`, spotId: sp.id, lat: sp.lat, lng: sp.lng })));
       const m = buildMockRain(sc);
-      t(`Mock 降雨與跑點降雨燈號一致（${sc}）`, RUN_SPOTS.every((sp, i) => classifyIndicator('rain', spotsAt(m, 0)[i]) === classifyIndicator('rain', wx[`spot-${sp.id}`].rain)), true);
+      t(`Mock 降雨與跑點降雨燈號一致（${sc}）`, SPOTS.every((sp, i) => classifyIndicator('rain', spotsAt(m, 0)[i]) === classifyIndicator('rain', wx[`spot-${sp.id}`].rain)), true);
     }
     // 圖層三選一、圖例、時間滑桿（Mock 情境才測；不發請求）
     if (state.dataMode !== 'live') {
@@ -1647,7 +1743,7 @@ function runTests() {
         const sl = q('#rainSlider'); sl.value = '3'; sl.dispatchEvent(new Event('input', { bubbles: true }));
         t('滑桿：+3 小時的文字', /^\+3 小時｜\d\d:00$/.test(q('#rainSlotLabel').textContent), true);
         t('滑桿：時段會記住', state.rainSlot, 3);
-        t('滑桿：只改變降雨圖層，跑點燈號不變', RUN_SPOTS.every((sp) => getSpotStatus(sp.id) === STATUS_META[state.evaluations[sp.id].status] ? true : getSpotStatus(sp.id) === state.evaluations[sp.id].status), true);
+        t('滑桿：只改變降雨圖層，跑點燈號不變', SPOTS.every((sp) => getSpotStatus(sp.id) === STATUS_META[state.evaluations[sp.id].status] ? true : getSpotStatus(sp.id) === state.evaluations[sp.id].status), true);
         // 資料無法取得
         const keep = state.rain;
         state.rain = { status: 'unavailable', source: 'live', reason: 'stale' }; renderRainUi();
@@ -1798,7 +1894,7 @@ function runTests() {
   }
   // ---- 推薦規則依對象區分 ----
   {
-    const sp5 = RUN_SPOTS.find((x) => x.id === 5), sp1 = RUN_SPOTS.find((x) => x.id === 1);
+    const sp5 = SPOTS.find((x) => x.id === 5), sp1 = SPOTS.find((x) => x.id === 1);
     const sorted = (r) => r.every((x, i) => i === 0 ||
       (STATUS_ORDER[r[i - 1].status] < STATUS_ORDER[x.status] || (r[i - 1].status === x.status && r[i - 1].distM <= x.distM)));
     t('推薦：綠燈跑點不顯示替代跑點', recommendSpots(sp1.lat, sp1.lng, 'green', 1, 'spot'), null);
@@ -1812,12 +1908,111 @@ function runTests() {
     t('推薦：附近跑點最多 3 筆', nearAny.length <= CONFIG.REC.max, true);
     t('推薦：附近跑點都在 5 km 內', nearAny.every((x) => x.distM <= 5000), true);
     t('推薦：附近跑點排序（燈號再距離）', sorted(nearAny), true);
-    t('推薦：附近跑點可含任何燈號（不篩選）', recommendSpots(sp5.lat, sp5.lng, 'red', null, 'place').some((x) => x.spot.id === 5), true);
+    {
+      // 地點類不依燈號篩選：結果＝5 km 內目前模式的全部點位依「燈號→距離」排序後的前 3 筆
+      const all = visibleSpots().map((sp) => ({ id: sp.id, st: getSpotStatus(sp.id), d: haversine(sp5.lat, sp5.lng, sp.lat, sp.lng) }))
+        .filter((x) => x.d <= 5000).sort((a, b) => STATUS_ORDER[a.st] - STATUS_ORDER[b.st] || a.d - b.d).slice(0, 3).map((x) => x.id).join();
+      t('推薦：附近跑點不依燈號篩選（含自己與任何燈號）', recommendSpots(sp5.lat, sp5.lng, 'red', null, 'place').map((x) => x.spot.id).join(), all);
+    }
     t('推薦：5 km 內沒有跑點 → 空陣列', recommendSpots(24.137, 120.687, 'green', null, 'place').length, 0);
     t('推薦：空狀態文字（地點類）', recommendHtml([], 'place').includes('5 公里內沒有收錄的跑點'), true);
     t('推薦：空狀態文字（跑點）', recommendHtml([], 'spot').includes('附近暫無更佳跑點，建議改至室內運動'), true);
     t('推薦：標題（跑點）', recommendHtml([], 'spot').includes('替代跑點'), true);
     t('推薦：標題（地點）', recommendHtml([], 'place').includes('附近跑點'), true);
+  }
+  // ---- 階段 D：運動點位資料與運動模式 ----
+  {
+    const TYPES = Object.keys(SPOT_TYPE_LABEL);
+    t('點位：共 21 筆', SPOTS.length, 21);
+    t('點位：慢跑（走路）20 個', visibleSpots('running').length, 20);
+    t('點位：籃球 1 個（社子大橋籃球場）', visibleSpots('basketball').map((x) => x.name).join(), '社子大橋籃球場');
+    t('點位：id 為整數且不重複', new Set(SPOTS.map((x) => x.id)).size === SPOTS.length && SPOTS.every((x) => Number.isInteger(x.id)), true);
+    t('點位：欄位格式正確', SPOTS.every((x) => x.name && x.city === '臺北市' && /區$/.test(x.district) && TYPES.includes(x.type) &&
+      Array.isArray(x.sports) && x.sports.length > 0 && x.sports.every((k) => SPORTS[k]) && [true, false, null].includes(x.covered) &&
+      typeof x.desc === 'string' && x.desc.length > 0 && (x.note === undefined || typeof x.note === 'string') &&
+      Math.round(x.lat * 1e5) / 1e5 === x.lat && Math.round(x.lng * 1e5) / 1e5 === x.lng), true);
+    t('點位：全部在臺北市界內', SPOTS.every((x) => pointInPolygon(x.lat, x.lng)), true);
+    let minD = Infinity;
+    SPOTS.forEach((a, i) => SPOTS.slice(i + 1).forEach((b) => { minD = Math.min(minD, haversine(a.lat, a.lng, b.lat, b.lng)); }));
+    t('點位：任兩點距離 ≥ 1 km', minD >= 1000, true);
+    const court = SPOTS.find((x) => x.id === 21);
+    t('籃球場：士林區、無遮蔽', `${spotArea(court)}|${court.covered}|${court.type}`, '臺北市士林區|false|court');
+    t('慢跑點位：遮雨先填 null', visibleSpots('running').every((x) => x.covered === null), true);
+    t('行政區顯示：city + district', spotArea(SPOTS.find((x) => x.id === 1)), '臺北市大安區');
+    t('類型中文：田徑場／步道／球場', ['track', 'trail', 'court'].map((k) => SPOT_TYPE_LABEL[k]).join(), '田徑場,步道,球場');
+    t('文字：慢跑模式', JSON.stringify(sportText('running')), JSON.stringify({ list: '跑點列表', near: '附近跑點', alt: '替代跑點', unit: '跑點', altEmpty: '附近暫無更佳跑點，建議改至室內運動', nearEmpty: '5 公里內沒有收錄的跑點' }));
+    t('文字：籃球模式', [sportText('basketball').list, sportText('basketball').near, sportText('basketball').altEmpty].join('|'), '球場列表|附近球場|附近暫無更佳球場，建議改至室內運動');
+    t('運動模式：讀取已存的值', loadSport({ getItem: () => 'basketball' }), 'basketball');
+    t('運動模式：無效值回到慢跑（走路）', loadSport({ getItem: () => 'tennis' }), 'running');
+    t('運動模式：沒有存過 → 慢跑（走路）', loadSport({ getItem: () => null }), 'running');
+    t('運動模式：localStorage 無法使用 → 慢跑（走路）', loadSport({ getItem: () => { throw new Error('denied'); } }), 'running');
+    t('Mock：籃球場有模擬數值', ['normal', 'pollution', 'storm'].every((sc) => {
+      const w = buildMockWeather(sc, [{ key: 'c', spotId: 21, lat: court.lat, lng: court.lng }]).c;
+      return [w.rain, w.uvi, w.feels].every((v) => typeof v === 'number');
+    }), true);
+    // 三種 Mock 情境的燈號分配（只在該情境測）
+    const EXPECT = {
+      normal:    { red: [5], yellow: [2, 8] },        // 其餘（含籃球場）綠燈
+      pollution: { yellow: [2], green: [] },          // 其餘（含籃球場）紅燈
+      storm:     { green: [], yellow: [] },           // 全部紅燈（大佳、花博一帶大雨；其餘 UVI 9）
+    }[state.dataMode];
+    if (EXPECT) {
+      const by = (st) => SPOTS.filter((x) => getSpotStatus(x.id) === st).map((x) => x.id).join();
+      if (state.dataMode === 'normal') {
+        t('Mock 正常：紅燈只有青年公園', by('red'), '5');
+        t('Mock 正常：黃燈為大佳河濱公園、大稻埕碼頭', by('yellow'), '2,8');
+        t('Mock 正常：其餘 18 個點位（含籃球場）綠燈', by('green').split(',').length, 18);
+      } else if (state.dataMode === 'pollution') {
+        t('Mock 高空汙：黃燈只有大佳河濱公園', by('yellow'), '2');
+        t('Mock 高空汙：其餘 20 個點位（含籃球場）紅燈', by('red').split(',').length, 20);
+      } else {
+        t('Mock 大雨曝曬：全部紅燈', by('red').split(',').length, 21);
+        t('Mock 大雨曝曬：大佳、花博因降雨 > 60% 紅燈', [2, 4].every((id) => state.readings[id].rain > 60 && state.readings[id].uvi <= 3), true);
+      }
+    }
+    // 介面：切換運動模式（結束後還原）
+    const keep = { sport: state.sport, sel: state.selectedId, focus: state.cardFocus, place: state.searchPlace };
+    const toastEl = document.getElementById('toast');
+    try {
+      setSport('running'); state.searchPlace = null;
+      selectSpot(1, { pan: false });
+      setSport('basketball');
+      t('切換模式：開著的跑點不屬於籃球 → 關閉資訊卡', `${state.selectedId}|${state.cardFocus}`, 'null|null');
+      t('籃球模式：地圖只剩 1 個標記', spotMarkers.size, 1);
+      t('籃球模式：列表只有籃球場', [...document.querySelectorAll('.js-spotlist')][0].querySelectorAll('.spot-item').length, 1);
+      t('籃球模式：列表標題「球場列表」', [...document.querySelectorAll('.js-list-title')].every((h) => h.textContent === '球場列表'), true);
+      t('籃球模式：按鈕顯示「籃球」', document.getElementById('sportBtnLabel').textContent, '籃球');
+      t('籃球模式：選單勾選籃球', document.querySelector('#sportMenu [data-sport="basketball"]').getAttribute('aria-checked'), 'true');
+      t('籃球模式：搜尋欄提示「搜尋球場、行政區或地點」', document.querySelector('input[type="search"]').placeholder, '搜尋球場、行政區或地點');
+      t('籃球模式：記在 localStorage', localStorage.getItem(SPORT_KEY), 'basketball');
+      t('籃球模式：搜尋「社子」找到球場', searchItems('社子').some((x) => x.kind === 'spot' && x.id === 21), true);
+      t('籃球模式：搜尋「大安」沒有點位（大安區無球場）', searchItems('大安').length, 0);
+      t('籃球模式：搜尋行政區顯示「臺北市士林區」「1 個球場」', (() => { const d = searchItems('士林').find((x) => x.kind === 'district'); return d && `${d.label}|${d.sub}`; })(), '臺北市士林區|1 個球場');
+      t('籃球模式：附近球場（地點類）', recommendHtml(recommendSpots(court.lat + 0.01, court.lng, 'green', null, 'place'), 'place').includes('附近球場'), true);
+      t('籃球模式：唯一球場不推薦自己 → 附近暫無更佳球場', recommendHtml(recommendSpots(court.lat, court.lng, 'red', 21, 'spot'), 'spot').includes('附近暫無更佳球場，建議改至室內運動'), true);
+      selectSpot(21, { pan: false });
+      const card = document.querySelector('.js-card').textContent;
+      t('資訊卡：球場顯示「無遮蔽」', card.includes('無遮蔽'), true);
+      t('資訊卡：顯示場域特色', card.includes(court.desc), true);
+      t('資訊卡：副標為「臺北市士林區・球場」', document.querySelector('.js-card .card-sub').textContent, '臺北市士林區・球場');
+      // 從最愛等處點選另一種運動的點位：自動切換模式並提示
+      selectSpot(11, { pan: false });
+      t('跨模式選取：自動切換為慢跑（走路）', state.sport, 'running');
+      t('跨模式選取：提示文字', toastEl.textContent, '已切換為慢跑（走路）模式');
+      t('跨模式選取：切換後列表依新模式（20 筆）', [...document.querySelectorAll('.js-spotlist')][0].querySelectorAll('.spot-item').length, 20);
+      t('跨模式選取：切換後標記依新模式（20 個）', spotMarkers.size, 20);
+      const card2 = document.querySelector('.js-card').textContent;
+      t('資訊卡：田徑場顯示備註', card2.includes('開放時間依場館公告'), true);
+      t('資訊卡：遮雨未知（null）不顯示', card2.includes('無遮蔽') || card2.includes('有遮雨棚'), false);
+      t('慢跑模式：推薦不含籃球場', recommendSpots(court.lat, court.lng, 'green', null, 'place').every((x) => x.spot.sports.includes('running')), true);
+      selectSpot(21, { pan: false });
+      t('跨模式選取：切到籃球並提示', `${state.sport}|${toastEl.textContent}`, 'basketball|已切換為籃球模式');
+      t('跨模式選取：籃球模式推薦標題', document.querySelector('.js-card').textContent.includes('替代球場') || getSpotStatus(21) === 'green', true);
+    } finally {
+      setSport(keep.sport);
+      state.selectedId = keep.sel; state.cardFocus = keep.focus; state.searchPlace = keep.place;
+      render();
+    }
   }
   // ---- 長按選點偵測器（假時鐘）----
   {
@@ -1906,7 +2101,7 @@ function runTests() {
   }
   // 熱力圖與跑點一致：每個跑點位置的熱力圖等級必須等於該跑點 PM2.5 的單項燈號（以目前資料模式的熱力圖檢查）
   if (state.data && heatField) {
-    for (const sp of RUN_SPOTS) {
+    for (const sp of SPOTS) {
       const reading = state.readings[sp.id];
       if (!reading || reading.pm25 === null) continue;
       cases.push({ name: `熱力圖等級 = 跑點 PM2.5 燈號（${sp.name}）`,
@@ -2017,9 +2212,14 @@ function spotIcon(status, selected, fav = false) {
   });
 }
 
-/** 依 RUN_SPOTS 建立 / 更新所有跑點標記 */
+/** 依 SPOTS 建立 / 更新所有跑點標記 */
 function renderMarkers() {
-  for (const spot of RUN_SPOTS) {
+  for (const spot of SPOTS) {
+    if (!spot.sports.includes(state.sport)) { // 不屬於目前運動模式：移除標記
+      const old = spotMarkers.get(spot.id);
+      if (old) { map.removeLayer(old); spotMarkers.delete(spot.id); }
+      continue;
+    }
     const status = getSpotStatus(spot.id);
     const selected = state.selectedId === spot.id;
     let marker = spotMarkers.get(spot.id);
@@ -2100,7 +2300,8 @@ function addLocateControl() {
    §8 UI：狀態管理與畫面渲染
    ===================================================================== */
 const state = {
-  selectedId: null,     // 目前選取的跑點 id
+  selectedId: null,     // 目前選取的點位 id
+  sport: SPORT_DEFAULT, // 運動模式：'running' | 'basketball'（啟動時由 localStorage 載入）
   userPos: null,        // { lat, lng, accuracy }；未取得定位時為 null
   evaluations: {},      // spotId → evaluate() 判定結果
   userEvaluation: null, // 使用者目前位置的判定結果
@@ -2133,7 +2334,7 @@ function sortedSpots() {
   const tie = pos
     ? (a, b) => haversine(pos.lat, pos.lng, a.lat, a.lng) - haversine(pos.lat, pos.lng, b.lat, b.lng)
     : (a, b) => a.name.localeCompare(b.name, 'zh-Hant');
-  return RUN_SPOTS.slice().sort((a, b) =>
+  return visibleSpots().sort((a, b) =>
     (STATUS_ORDER[getSpotStatus(a.id)] - STATUS_ORDER[getSpotStatus(b.id)]) || tie(a, b));
 }
 
@@ -2148,7 +2349,7 @@ function spotItemHtml(spot, distM) {
     <span class="status-dot" title="${meta.label}">${iconSvg(meta.icon)}</span>
     <span class="meta">
       <span class="name">${escapeHtml(spot.name)}</span>
-      <span class="sub"><span class="st-label">${meta.label}</span><span class="where">・${escapeHtml(spot.district)}・${SPOT_TYPE_LABEL[spot.type] || ''}</span></span>
+      <span class="sub"><span class="st-label">${meta.label}</span><span class="where">・${escapeHtml(spotArea(spot))}・${SPOT_TYPE_LABEL[spot.type] || ''}</span></span>
     </span>${dist}</button></li>`;
 }
 
@@ -2157,6 +2358,7 @@ function renderList() {
   const html = sortedSpots().map((spot) =>
     spotItemHtml(spot, pos ? haversine(pos.lat, pos.lng, spot.lat, spot.lng) : null)).join('');
   document.querySelectorAll('.js-spotlist').forEach((ul) => { ul.innerHTML = html; });
+  document.querySelectorAll('.js-list-title').forEach((h) => { h.textContent = sportText().list; });
 }
 
 /** 資料來源標記（側邊欄底部與窄螢幕頂部各一個）與更新時間 */
@@ -2225,8 +2427,10 @@ function flyToPoint(lat, lng, zoom, duration = 0.6) {
 
 /** 選取跑點：地圖平移、收合 Sheet 並更新畫面 */
 function selectSpot(id, { pan = true } = {}) {
-  const spot = RUN_SPOTS.find((s) => s.id === id);
+  const spot = SPOTS.find((s) => s.id === id);
   if (!spot) return;
+  // 點位不屬於目前運動模式（例如從我的最愛點選籃球場）：自動切換模式並提示
+  if (!spot.sports.includes(state.sport)) setSport(spot.sports[0], { toast: true, render: false });
   state.selectedId = id;
   state.cardFocus = 'spot';
   state.favEditing = null;
@@ -2313,7 +2517,7 @@ async function ensureSearchWeather() {
 function recommendSpots(lat, lng, status, excludeId = null, kind = 'spot') {
   if (kind === 'spot' && status !== 'yellow' && status !== 'red') return null;
   const rank = STATUS_ORDER[status];
-  return RUN_SPOTS
+  return visibleSpots()
     .filter((sp) => sp.id !== excludeId)
     .map((sp) => ({ spot: sp, status: getSpotStatus(sp.id), distM: haversine(lat, lng, sp.lat, sp.lng) }))
     .filter((x) => x.distM <= CONFIG.REC.radiusM &&
@@ -2322,13 +2526,14 @@ function recommendSpots(lat, lng, status, excludeId = null, kind = 'spot') {
     .slice(0, CONFIG.REC.max);
 }
 
-const REC_TEXT = {
-  spot:  { title: '替代跑點', empty: '附近暫無更佳跑點，建議改至室內運動' },
-  place: { title: '附近跑點', empty: '5 公里內沒有收錄的跑點' },
-};
+/** 推薦區標題與空狀態文字（依運動模式：替代跑點／替代球場、附近跑點／附近球場） */
+function recText(kind) {
+  const t = sportText();
+  return kind === 'spot' ? { title: t.alt, empty: t.altEmpty } : { title: t.near, empty: t.nearEmpty };
+}
 function recommendHtml(rec, kind = 'spot') {
   if (rec === null) return '';
-  const tx = REC_TEXT[kind];
+  const tx = recText(kind);
   return `<section class="rec" aria-label="${tx.title}"><h3 class="rec-title">${tx.title}</h3>${
     rec.length
       ? `<ul class="spot-list rec-list">${rec.map((x) => spotItemHtml(x.spot, x.distM)).join('')}</ul>`
@@ -2355,7 +2560,7 @@ function metricHtml(ind, reading, ev) {
  * 資訊卡內容。
  * @param {{title:string, sub:string, ev:object, reading:object, closable:boolean, ref:{lat:number,lng:number,excludeId:?number,kind:'spot'|'place'}}} o
  */
-function cardHtml({ title, sub, ev, reading, closable, ref, actions = '', below = '', favNote = '' }) {
+function cardHtml({ title, sub, ev, reading, closable, ref, actions = '', below = '', favNote = '', facts = '' }) {
   const status = ev.status;
   const meta = STATUS_META[status];
   const notes = [];
@@ -2374,6 +2579,7 @@ function cardHtml({ title, sub, ev, reading, closable, ref, actions = '', below 
     <span class="chip">${iconSvg(meta.icon)}${meta.label}</span>
     <p class="card-advice">${escapeHtml(adviceFor(ev))}</p>
     <div class="metrics">${INDICATORS.map((ind) => metricHtml(ind, reading, ev)).join('')}</div>
+    ${facts}
     ${notes.concat(favNote ? [favNote] : []).map((n) => `<p class="card-note">${escapeHtml(n)}</p>`).join('')}
     ${ref ? recommendHtml(recommendSpots(ref.lat, ref.lng, status, ref.excludeId, ref.kind), ref.kind) : ''}
     <p class="card-foot">更新 ${state.data ? formatTaipei(state.data.updatedAt) : '—'}・${escapeHtml(src.label)}</p>
@@ -2421,6 +2627,15 @@ function favFormHtml() {
   </form>`;
 }
 
+/** 點位資訊：場域特色、遮雨（null 不顯示）、備註 */
+function spotFactsHtml(spot) {
+  const tags = [];
+  if (spot.covered === true || spot.covered === false) tags.push(COVERED_LABEL[spot.covered]);
+  if (spot.note) tags.push(spot.note);
+  return `<div class="card-facts"><p class="card-desc">${escapeHtml(spot.desc)}</p>${
+    tags.length ? `<p class="card-tags">${tags.map((x) => `<span>${escapeHtml(x)}</span>`).join('')}</p>` : ''}</div>`;
+}
+
 /** 依狀態決定資訊卡：搜尋位置 → 最愛自選點位 → 選取的跑點 → 目前位置 → 提示 */
 function infoCardHtml() {
   const hint = (msg) => `<div class="card card-hint"><svg class="icon"><use href="#i-info"/></svg>${msg}</div>`;
@@ -2444,10 +2659,10 @@ function infoCardHtml() {
                       actions: `${favBtnHtml(`fav:${fav.id}`, true)}<button type="button" class="card-rename" data-action="fav-rename" aria-label="改名" title="改名">${iconSvg('i-edit')}</button>`,
                       below: state.favEditing && state.favEditing.mode === 'rename' ? favFormHtml() : '' });
   }
-  const spot = RUN_SPOTS.find((x) => x.id === state.selectedId);
+  const spot = SPOTS.find((x) => x.id === state.selectedId);
   if (state.cardFocus === 'spot' && spot && state.evaluations[spot.id]) {
     const on = favStore.hasSpot(spot.id), full = !on && favStore.isFull();
-    return cardHtml({ title: spot.name, sub: `${spot.district}・${SPOT_TYPE_LABEL[spot.type] || ''}`,
+    return cardHtml({ title: spot.name, sub: `${spotArea(spot)}・${SPOT_TYPE_LABEL[spot.type] || ''}`, facts: spotFactsHtml(spot),
                       ev: state.evaluations[spot.id], reading: state.readings[spot.id], closable: true,
                       ref: { lat: spot.lat, lng: spot.lng, excludeId: spot.id, kind: 'spot' },
                       actions: favBtnHtml(`spot:${spot.id}`, on, full ? FAV_MSG.full : ''), favNote: full ? FAV_MSG.full : '' });
@@ -2457,7 +2672,7 @@ function infoCardHtml() {
                       ev: state.userEvaluation, reading: state.userReading, closable: false,
                       ref: { lat: state.userPos.lat, lng: state.userPos.lng, excludeId: null, kind: 'place' } });
   }
-  return hint(`點選地圖上的跑點，查看是否適合出發${state.geoFailed ? '<br>（未取得定位，無法顯示目前位置）' : ''}<br>${pickTip()}`);
+  return hint(`點選地圖上的${sportText().unit}，查看是否適合出發${state.geoFailed ? '<br>（未取得定位，無法顯示目前位置）' : ''}<br>${pickTip()}`);
 }
 
 function renderCards() {
@@ -2483,13 +2698,16 @@ const normQ = (str) => str.trim().toLowerCase().replace(/臺/g, '台');
 /** 建立搜尋索引：行政區（來自跑點資料）＋跑點 */
 function buildSearchIndex() {
   const items = [];
-  const districts = [...new Set(RUN_SPOTS.map((x) => x.district))];
-  for (const d of districts) {
-    const n = RUN_SPOTS.filter((x) => x.district === d).length;
-    items.push({ kind: 'district', label: d, sub: `${n} 個跑點`, key: normQ(d), alt: normQ(d.replace(/區$/, '')) });
+  const spots = visibleSpots(), unit = sportText().unit;
+  const areas = [...new Set(spots.map((x) => spotArea(x)))];
+  for (const a of areas) {
+    const inArea = spots.filter((x) => spotArea(x) === a), d = inArea[0].district;
+    // 可用「臺北市大安區」「台北大安」「大安區」「大安」搜尋
+    items.push({ kind: 'district', label: a, district: d, sub: `${inArea.length} 個${unit}`, key: normQ(a),
+                 alt: [normQ(d), normQ(d.replace(/區$/, '')), normQ(a.replace(/市/, ''))] });
   }
-  for (const sp of RUN_SPOTS) {
-    items.push({ kind: 'spot', id: sp.id, label: sp.name, sub: sp.district, key: normQ(sp.name), alt: '' });
+  for (const sp of spots) {
+    items.push({ kind: 'spot', id: sp.id, label: sp.name, sub: spotArea(sp), key: normQ(sp.name), alt: [] });
   }
   return items;
 }
@@ -2503,8 +2721,8 @@ function searchItems(q) {
   idx.forEach((it, i) => {
     let score = null;
     if (it.kind === 'district') {
-      if (it.key.startsWith(n) || it.alt.startsWith(n)) score = 0;
-      else if (it.key.includes(n)) score = 2;
+      if (it.key.startsWith(n) || it.alt.some((a) => a.startsWith(n))) score = 0;
+      else if (it.key.includes(n) || it.alt.some((a) => a.includes(n))) score = 2;
     } else if (it.key.startsWith(n)) score = 1;
     else if (it.key.includes(n)) score = 3;
     if (score !== null) scored.push({ it, score, i });
@@ -2512,9 +2730,9 @@ function searchItems(q) {
   return scored.sort((a, b) => a.score - b.score || a.i - b.i).slice(0, SEARCH_MAX).map((x) => x.it);
 }
 
-/** 行政區：縮放到該區全部跑點 */
+/** 行政區：縮放到該區（目前運動模式的）全部點位；name 可為「大安區」或「臺北市大安區」 */
 function focusDistrict(name) {
-  const spots = RUN_SPOTS.filter((x) => x.district === name);
+  const spots = visibleSpots().filter((x) => x.district === name || spotArea(x) === name);
   if (!spots.length) return;
   setSheet(false);
   const bottom = isNarrow() ? SHEET_COLLAPSED_PX + 40 : 60;
@@ -2615,7 +2833,7 @@ function initSearch(root) {
     list.innerHTML = rows.map((r, i) => {
       if (r.type === 'msg') return `<li class="search-empty" role="option" aria-disabled="true">${escapeHtml(r.text)}${r.sub ? `<br><small>${escapeHtml(r.sub)}</small>` : ''}</li>`;
       if (r.type === 'geo') return `<li class="s-geo" role="option" id="${list.id}-${i}" data-i="${i}" aria-selected="false">${iconSvg('i-search')}搜尋地點：『${escapeHtml(r.query)}』</li>`;
-      const kind = r.type === 'district' ? '行政區' : r.type === 'spot' ? '跑點' : (r.place.inTaipei ? '地點' : '台北市外');
+      const kind = r.type === 'district' ? '行政區' : r.type === 'spot' ? sportText().unit : (r.place.inTaipei ? '地點' : '台北市外');
       const label = r.type === 'result' ? r.place.name : r.label;
       const sub = r.type === 'result' ? r.place.sub : r.sub;
       return `<li role="option" id="${list.id}-${i}" data-i="${i}" aria-selected="false"><span class="s-kind">${kind}</span>${escapeHtml(label)}<span class="s-sub">${escapeHtml(sub || '')}</span></li>`;
@@ -3270,12 +3488,46 @@ function setLayer(mode) {
 /** 舊介面相容：開 / 關 PM2.5 熱力圖 */
 function setHeatmap(on) { setLayer(on ? 'pm25' : 'off'); }
 
-function toggleLayerMenu(open) {
-  const menu = document.getElementById('layerMenu'), btn = document.getElementById('heatBtn');
+function toggleMenu(menuId, btnId, open) {
+  const menu = document.getElementById(menuId), btn = document.getElementById(btnId);
   const willOpen = open === undefined ? menu.hidden : open;
   menu.hidden = !willOpen;
   btn.setAttribute('aria-expanded', String(willOpen));
   if (willOpen) { const cur = menu.querySelector('[aria-checked="true"]'); if (cur) cur.focus(); }
+}
+function toggleLayerMenu(open) { if (open !== false) toggleSportMenu(false); toggleMenu('layerMenu', 'heatBtn', open); }
+function toggleSportMenu(open) { if (open !== false) toggleMenu('layerMenu', 'heatBtn', false); toggleMenu('sportMenu', 'sportBtn', open); }
+
+/** 運動模式按鈕與選單的外觀 */
+function renderSportControl() {
+  const sp = SPORTS[state.sport], btn = document.getElementById('sportBtn');
+  if (!btn) return;
+  document.getElementById('sportBtnLabel').textContent = sp.label;
+  document.getElementById('sportBtnIcon').innerHTML = `<use href="#${sp.icon}"/>`;
+  btn.dataset.sport = state.sport;
+  btn.setAttribute('aria-label', `運動模式：${sp.label}（點擊切換）`);
+  btn.title = `運動模式：${sp.label}`;
+  document.querySelectorAll('#sportMenu [data-sport]').forEach((el) => el.setAttribute('aria-checked', String(el.dataset.sport === state.sport)));
+  const ph = `搜尋${sportText().unit}、行政區或地點`;
+  document.querySelectorAll('input[type="search"]').forEach((el) => { el.placeholder = ph; el.setAttribute('aria-label', ph); });
+}
+
+/**
+ * 切換運動模式：地圖標記、列表、搜尋、推薦都只顯示該運動的點位（熱力圖、目前位置、地圖選點、搜尋地點不受影響）。
+ * 開著的點位不屬於新模式 → 關閉資訊卡。toast：顯示「已切換為○○模式」（從最愛點選另一種運動的點位時）。
+ */
+function setSport(sport, { toast = false, render: doRender = true } = {}) {
+  if (!SPORTS[sport] || sport === state.sport) return false;
+  state.sport = sport;
+  saveSport(sport);
+  if (state.cardFocus === 'spot') {
+    const cur = SPOTS.find((x) => x.id === state.selectedId);
+    if (!cur || !cur.sports.includes(sport)) { state.selectedId = null; state.cardFocus = null; }
+  }
+  renderSportControl();
+  if (toast) showToast(`已切換為${SPORTS[sport].label}模式`, 3500, true);
+  if (doRender) render();
+  return true;
 }
 
 /** 建立圖層按鈕、選單與時間滑桿的事件 */
@@ -3285,6 +3537,14 @@ function initHeatControl() {
   L.DomEvent.disableScrollPropagation(ctl);
   L.DomEvent.disableClickPropagation(document.getElementById('rainBar'));
   document.getElementById('heatBtn').addEventListener('click', () => toggleLayerMenu());
+  document.getElementById('sportBtn').addEventListener('click', () => toggleSportMenu());
+  document.getElementById('sportMenu').addEventListener('click', (e) => {
+    const item = e.target.closest('[data-sport]');
+    if (!item) return;
+    toggleSportMenu(false);
+    setSport(item.dataset.sport);
+    document.getElementById('sportBtn').focus();
+  });
   document.getElementById('layerMenu').addEventListener('click', (e) => {
     const item = e.target.closest('[data-layer]');
     if (!item) return;
@@ -3292,17 +3552,26 @@ function initHeatControl() {
     setLayer(item.dataset.layer);
     document.getElementById('heatBtn').focus();
   });
-  document.getElementById('layerMenu').addEventListener('keydown', (e) => {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    e.preventDefault();
-    const items = [...document.querySelectorAll('#layerMenu [data-layer]')];
-    const i = items.indexOf(document.activeElement);
-    items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+  for (const id of ['layerMenu', 'sportMenu']) {
+    document.getElementById(id).addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const items = [...document.querySelectorAll(`#${id} [role="menuitemradio"]`)];
+      const i = items.indexOf(document.activeElement);
+      items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+    });
+  }
+  document.addEventListener('click', (e) => {
+    const item = e.target.closest('.ctl-item');
+    if (!item || !item.contains(document.getElementById('layerMenu'))) toggleMenu('layerMenu', 'heatBtn', false);
+    if (!item || !item.contains(document.getElementById('sportMenu'))) toggleMenu('sportMenu', 'sportBtn', false);
   });
-  document.addEventListener('click', (e) => { if (!e.target.closest('#heatCtl')) toggleLayerMenu(false); });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !document.getElementById('layerMenu').hidden) { toggleLayerMenu(false); document.getElementById('heatBtn').focus(); }
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('layerMenu').hidden) { toggleLayerMenu(false); document.getElementById('heatBtn').focus(); }
+    if (!document.getElementById('sportMenu').hidden) { toggleSportMenu(false); document.getElementById('sportBtn').focus(); }
   });
+  renderSportControl();
   document.getElementById('rainBar').addEventListener('input', (e) => {
     if (e.target.id !== 'rainSlider' || !state.rain || state.rain.status !== 'ok') return;
     state.rainSlot = Number(e.target.value);
@@ -3453,7 +3722,7 @@ function createFavStore(storage) {
   const sanitize = (it) => {
     if (!it || typeof it !== 'object') return null;
     if (it.kind === 'spot') {
-      return Number.isInteger(it.spotId) && RUN_SPOTS.some((x) => x.id === it.spotId)
+      return Number.isInteger(it.spotId) && SPOTS.some((x) => x.id === it.spotId)
         ? { id: `spot-${it.spotId}`, kind: 'spot', spotId: it.spotId } : null;
     }
     if (it.kind === 'place') {
@@ -3485,7 +3754,7 @@ function createFavStore(storage) {
   store.get = (id) => store.items.find((x) => x.id === id) || null;
   store.hasSpot = (spotId) => store.items.some((x) => x.kind === 'spot' && x.spotId === spotId);
   store.addSpot = (spotId) => {
-    if (!RUN_SPOTS.some((x) => x.id === spotId)) return fail('invalid', '找不到這個跑點');
+    if (!SPOTS.some((x) => x.id === spotId)) return fail('invalid', '找不到這個跑點');
     if (store.hasSpot(spotId)) return fail('exists', FAV_MSG.exists);
     if (store.isFull()) return fail('full', FAV_MSG.full);
     const item = { id: `spot-${spotId}`, kind: 'spot', spotId };
@@ -3521,11 +3790,11 @@ function createFavStore(storage) {
 let favStore = createFavStore(getLocalStorage()).load();
 let favWarned = false; // 「最愛無法保存」只提示一次
 
-/** 最愛的名稱 / 副標 / 燈號 / 座標（跑點取自 RUN_SPOTS；自選點位取自儲存的資料） */
+/** 最愛的名稱 / 副標 / 燈號 / 座標（跑點取自 SPOTS；自選點位取自儲存的資料） */
 function favInfo(f) {
   if (f.kind === 'spot') {
-    const sp = RUN_SPOTS.find((x) => x.id === f.spotId);
-    return { name: sp.name, sub: `${sp.district}・${SPOT_TYPE_LABEL[sp.type] || ''}`, lat: sp.lat, lng: sp.lng, status: getSpotStatus(sp.id) };
+    const sp = SPOTS.find((x) => x.id === f.spotId);
+    return { name: sp.name, sub: `${spotArea(sp)}・${SPOT_TYPE_LABEL[sp.type] || ''}`, lat: sp.lat, lng: sp.lng, status: getSpotStatus(sp.id) };
   }
   const ev = state.favEvaluations[f.id];
   return { name: f.name, sub: f.sub || '自選點位', lat: f.lat, lng: f.lng, status: ev ? ev.status : 'unknown' };
@@ -3631,7 +3900,7 @@ function toggleFavoriteFromCard(target) {
     if (favStore.get(key)) { removeFavorite(key); return; }
     const r = favStore.addSpot(spotId);
     if (!r.ok) { showToast(r.message); return; }
-    const sp = RUN_SPOTS.find((x) => x.id === spotId);
+    const sp = SPOTS.find((x) => x.id === spotId);
     showToast(`已加入最愛「${sp.name}」`);
     noteFavSave(r);
     render();
@@ -3893,7 +4162,7 @@ async function testNotification() {
   const m = state.monitor;
   let subj = monitorSubject();
   if (!subj) {
-    const spot = RUN_SPOTS.find((x) => x.id === state.selectedId) || RUN_SPOTS[0];
+    const spot = SPOTS.find((x) => x.id === state.selectedId) || SPOTS[0];
     const ev = state.evaluations[spot.id];
     if (!ev) { m.testMsg = '資料載入中，請稍後再試'; renderMonitor(); return; }
     subj = { district: spot.district, ev, reading: state.readings[spot.id] };
@@ -3960,6 +4229,7 @@ function bootstrap() {
     const m = new URLSearchParams(location.search).get('mode');
     if (m && DATA_MODES.some((d) => d.id === m)) state.dataMode = m;
   } catch (e) { /* 忽略無效參數 */ }
+  state.sport = loadSport(); // 運動模式：記住上次的選擇（讀取失敗回到預設「慢跑（走路）」）
   initMap();
   bindUI();
   initHeatControl();
@@ -3974,7 +4244,7 @@ function bootstrap() {
 
 // 對外提供除錯 / 測試介面（之後階段會加入 evaluate、runTests 等）
 window.SafeAir = {
-  RUN_SPOTS, CONFIG, PM25_SOURCES, state, getFavStore: () => favStore, createFavStore, validateFavName, haversine, selectSpot,
+  SPOTS, SPORTS, setSport, visibleSpots, sportText, spotArea, loadSport, SPORT_KEY, buildMockWeather, CONFIG, PM25_SOURCES, state, getFavStore: () => favStore, createFavStore, validateFavName, haversine, selectSpot,
   idwEstimate, moenvAdapter, lassAdapter, cleanStations, refreshData, setDataMode, currentTaipeiHourKey,
   classifyIndicator, evaluate, adviceFor, runTests, contrastRatio,
   setLayer, getLayer: () => layerMode, getRain: () => state.rain, parseRain, rainStateFrom, buildMockRain, rainInterp, rainLevel, rainAreaShare, RAIN_COLORS, pointInPolygon, TAIPEI_OUTLINE, districtOf, buildPickPlace, pickAt, createLongPressDetector, setMonitoring, testNotification, monitorCheck, cooldownRemainingMin, clearCooldowns, shouldNotifyTransition, describeCause, recommendSpots, selectSearchPlace, geocode, clearSelection, setHeatmap, getHeatStats: () => heatField && heatField.stats, getHeatField: () => heatField, heatValueAt, heatPixelAt, buildHeatField,
